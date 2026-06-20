@@ -1,0 +1,87 @@
+<?php
+
+declare(strict_types=1);
+
+use backend\models\UserUpdateForm;
+use common\models\Department;
+use common\models\User;
+use yii\bootstrap5\ActiveForm;
+use yii\helpers\ArrayHelper;
+use yii\helpers\Html;
+use yii\helpers\Url;
+
+/** @var yii\web\View $this */
+/** @var UserUpdateForm $model */
+/** @var User $user */
+/** @var Department[] $departments */
+
+$this->title = 'แก้ไขผู้ใช้: ' . $user->username;
+$this->params['breadcrumbs'][] = ['label' => 'ผู้ใช้และบทบาท', 'url' => ['index']];
+$this->params['breadcrumbs'][] = 'แก้ไขผู้ใช้';
+$this->registerCssFile('@web/css/eoffice.css', ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
+$signatureUrl = $user->signature_path ? Url::to('@web/' . ltrim($user->signature_path, '/'), true) : null;
+$departmentItems = ArrayHelper::map($departments, 'id', 'name');
+?>
+
+<div class="eoffice-page">
+    <div class="eoffice-titlebar">
+        <div>
+            <h1><?= Html::encode($this->title) ?></h1>
+            <p>แก้ไขข้อมูลบัญชี บทบาท สถานะ และรหัสผ่าน</p>
+        </div>
+        <?= Html::a('กลับหน้าผู้ใช้', ['index'], ['class' => 'btn btn-outline-secondary']) ?>
+    </div>
+
+    <div class="form-grid">
+        <section class="content-card">
+            <?php $form = ActiveForm::begin(['options' => ['enctype' => 'multipart/form-data']]); ?>
+                <div class="row">
+                    <div class="col-md-6">
+                        <?= $form->field($model, 'username')->textInput(['maxlength' => true, 'autofocus' => true]) ?>
+                    </div>
+                    <div class="col-md-6">
+                        <?= $form->field($model, 'email')->input('email', ['maxlength' => true]) ?>
+                    </div>
+                </div>
+
+                <?= $form->field($model, 'password')->passwordInput(['maxlength' => true])->hint('เว้นว่างไว้ถ้าไม่ต้องการเปลี่ยนรหัสผ่าน') ?>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <?= $form->field($model, 'role')->dropDownList(User::roleOptions()) ?>
+                    </div>
+                    <div class="col-md-6">
+                        <?= $form->field($model, 'status')->dropDownList(UserUpdateForm::statusOptions()) ?>
+                    </div>
+                </div>
+
+                <?= $form->field($model, 'department_id')->dropDownList($departmentItems, [
+                    'prompt' => 'ไม่ผูกกลุ่มงาน',
+                ])->hint('ใช้กับบทบาทหัวหน้ากลุ่มงาน เพื่อจำกัดงานที่มองเห็นตามกลุ่มงานหลัก') ?>
+
+                <?= $form->field($model, 'department_ids')->checkboxList($departmentItems, [
+                    'itemOptions' => ['class' => 'form-check-input'],
+                ])->hint('ใช้กับบทบาทผู้ใช้ทั่วไป สามารถสังกัดได้หลายกลุ่มงาน') ?>
+
+                <?php if ($signatureUrl): ?>
+                    <div class="signature-preview">
+                        <span>ลายเซ็นปัจจุบัน</span>
+                        <img src="<?= Html::encode($signatureUrl) ?>?v=<?= Html::encode((string) time()) ?>" alt="ลายเซ็น <?= Html::encode($user->username) ?>">
+                    </div>
+                <?php endif; ?>
+
+                <?= $form->field($model, 'signatureFile')->fileInput(['accept' => 'image/png,image/jpeg'])->hint('อัปโหลดไฟล์ใหม่เมื่อต้องการเปลี่ยนลายเซ็น') ?>
+
+                <div class="form-actions">
+                    <?= Html::a('ยกเลิก', ['index'], ['class' => 'btn btn-outline-secondary']) ?>
+                    <?= Html::submitButton('บันทึกการแก้ไข', ['class' => 'btn btn-primary']) ?>
+                </div>
+            <?php ActiveForm::end(); ?>
+        </section>
+
+        <aside class="stamp-card">
+            <h2>การลบผู้ใช้</h2>
+            <p>ระบบจะปิดใช้งานบัญชีแทนการลบข้อมูลออกจากฐานข้อมูล เพื่อเก็บประวัติเอกสารและ audit log ให้ยังอ่านได้ครบ</p>
+        </aside>
+    </div>
+</div>

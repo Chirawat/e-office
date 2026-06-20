@@ -1,0 +1,151 @@
+<?php
+
+declare(strict_types=1);
+
+namespace backend\models;
+
+use common\models\Department;
+use common\models\User;
+use common\models\UserDepartment;
+use Yii;
+use yii\base\Model;
+use yii\helpers\FileHelper;
+use yii\web\UploadedFile;
+
+class UserCreateForm extends Model
+{
+    public string $username = '';
+    public string $email = '';
+    public string $password = '';
+    public string $role = User::ROLE_OFFICER;
+    public int|string|null $department_id = null;
+    public array $department_ids = [];
+    public int $status = User::STATUS_ACTIVE;
+    public ?UploadedFile $signatureFile = null;
+
+    public function rules(): array
+    {
+        return [
+            [['username', 'email', 'password', 'role', 'status'], 'required'],
+            [['username', 'email'], 'trim'],
+            ['username', 'string', 'min' => 2, 'max' => 255],
+            ['username', 'unique', 'targetClass' => User::class, 'message' => 'Username นี้ถูกใช้แล้ว'],
+            ['email', 'email'],
+            ['email', 'string', 'max' => 255],
+            ['email', 'unique', 'targetClass' => User::class, 'message' => 'Email นี้ถูกใช้แล้ว'],
+            ['password', 'string', 'min' => 6, 'max' => 128],
+            ['role', 'in', 'range' => array_keys(User::roleOptions())],
+            ['department_id', 'integer'],
+            ['department_id', 'exist', 'targetClass' => Department::class, 'targetAttribute' => ['department_id' => 'id']],
+            ['department_ids', 'each', 'rule' => ['integer']],
+            ['department_ids', 'each', 'rule' => ['exist', 'targetClass' => Department::class, 'targetAttribute' => ['department_ids' => 'id']]],
+            ['status', 'integer'],
+            ['status', 'in', 'range' => array_keys(self::statusOptions())],
+            ['signatureFile', 'file', 'skipOnEmpty' => true, 'extensions' => ['png', 'jpg', 'jpeg'], 'maxSize' => 2 * 1024 * 1024],
+        ];
+    }
+
+    public function load($data, $formName = null): bool
+    {
+        $scope = $formName ?? $this->formName();
+        if ($scope === '' && isset($data['signatureFile'])) {
+            unset($data['signatureFile']);
+        } elseif (isset($data[$scope]['signatureFile'])) {
+            unset($data[$scope]['signatureFile']);
+        }
+
+        $loaded = parent::load($data, $formName);
+        $this->signatureFile = UploadedFile::getInstance($this, 'signatureFile');
+        $this->normalizeDepartments();
+
+        return $loaded || $this->signatureFile !== null;
+    }
+
+    public function attributeLabels(): array
+    {
+        return [
+            'username' => 'Username',
+            'email' => 'Email',
+            'password' => 'Password',
+            'role' => 'บทบาทผู้ใช้',
+            'department_id' => 'กลุ่มงาน',
+            'department_ids' => 'สังกัดกลุ่มงาน',
+            'status' => 'สถานะ',
+            'signatureFile' => 'ไฟล์ลายเซ็น',
+        ];
+    }
+
+    public static function statusOptions(): array
+    {
+        return [
+            User::STATUS_ACTIVE => 'ใช้งาน',
+            User::STATUS_INACTIVE => 'พักใช้งาน',
+        ];
+    }
+
+    public function save(): ?User
+    {
+        if (!$this->validate()) {
+            return null;
+        }
+
+        $departmentId = $this->role === User::ROLE_STAFF && $this->department_id !== null ? (int) $this->department_id : null;
+        $user = new User([
+            'username' => $this->username,
+            'email' => $this->email,
+            'role' => $this->role,
+            'department_id' => $departmentId,
+            'status' => $this->status,
+        ]);
+        $user->setPassword($this->password);
+        $user->generateAuthKey();
+        $user->verification_token = Yii::$app->security->generateRandomString();
+
+        if (!$user->save(false)) {
+            return null;
+        }
+
+        $this->saveSignatureFile($user);
+        $this->syncDepartments($user);
+
+        return $user;
+    }
+
+    private function syncDepartments(User $user): void
+    {
+        $departmentIds = $this->role === User::ROLE_GENERAL_USER ? $this->department_ids : [];
+        foreach (array_values(array_unique(array_map('intval', $departmentIds))) as $departmentId) {
+            (new UserDepartment([
+                'user_id' => $user->id,
+                'department_id' => $departmentId,
+                'created_at' => time(),
+            ]))->save(false);
+        }
+    }
+
+    private function normalizeDepartments(): void
+    {
+        $this->department_id = $this->department_id !== '' && $this->department_id !== null ? (int) $this->department_id : null;
+        $this->department_ids = array_values(array_filter(
+            array_map(static fn ($id): int|string|null => $id !== '' && $id !== null ? (int) $id : null, (array) $this->department_ids),
+            static fn ($id): bool => $id !== null,
+        ));
+    }
+
+    private function saveSignatureFile(User $user): void
+    {
+        if ($this->signatureFile === null) {
+            return;
+        }
+
+        $extension = strtolower($this->signatureFile->extension ?: 'png');
+        $dir = Yii::getAlias('@backend/web/uploads/signatures/' . $user->id);
+        FileHelper::createDirectory($dir);
+
+        $path = $dir . '/signature.' . $extension;
+        $this->signatureFile->saveAs($path);
+
+        $user->signature_path = 'uploads/signatures/' . $user->id . '/signature.' . $extension;
+        $user->save(false, ['signature_path', 'updated_at']);
+    }
+}
