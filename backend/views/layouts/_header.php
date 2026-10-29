@@ -23,6 +23,11 @@ $mainItems = [
         'visible' => !Yii::$app->user->isGuest,
     ],
     [
+        'label' => '<i class="bi bi-journal-text" aria-hidden="true"></i><span>บันทึกเสนอ</span>',
+        'url' => ['/memo/index'],
+        'visible' => !Yii::$app->user->isGuest,
+    ],
+    [
         'label' => '<i class="bi bi-list-check" aria-hidden="true"></i><span>งานของฉัน</span>',
         'url' => ['/document/my'],
         'visible' => !Yii::$app->user->isGuest,

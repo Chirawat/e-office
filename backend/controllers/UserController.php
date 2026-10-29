@@ -10,6 +10,7 @@ use common\models\Department;
 use common\models\User;
 use Yii;
 use yii\data\ActiveDataProvider;
+use yii\db\Expression;
 use yii\filters\AccessControl;
 use yii\filters\VerbFilter;
 use yii\web\Controller;
@@ -44,13 +45,24 @@ class UserController extends Controller
     public function actionIndex(): string
     {
         $this->requireAdmin();
+        $roleOrder = sprintf(
+            "CASE [[role]] WHEN '%s' THEN 10 WHEN '%s' THEN 20 WHEN '%s' THEN 30 WHEN '%s' THEN 40 WHEN '%s' THEN 50 WHEN '%s' THEN 60 ELSE 99 END",
+            User::ROLE_ADMIN,
+            User::ROLE_DIRECTOR,
+            User::ROLE_DEPUTY_DIRECTOR,
+            User::ROLE_STAFF,
+            User::ROLE_OFFICER,
+            User::ROLE_GENERAL_USER,
+        );
+        $query = User::find()
+            ->with(['department', 'departments'])
+            ->where(['<>', 'status', User::STATUS_DELETED])
+            ->orderBy(new Expression($roleOrder))
+            ->addOrderBy(['username' => SORT_ASC, 'id' => SORT_ASC]);
 
         return $this->render('index', [
             'dataProvider' => new ActiveDataProvider([
-                'query' => User::find()
-                    ->with(['department', 'departments'])
-                    ->where(['<>', 'status', User::STATUS_DELETED])
-                    ->orderBy(['id' => SORT_ASC]),
+                'query' => $query,
                 'pagination' => ['pageSize' => 20],
             ]),
         ]);

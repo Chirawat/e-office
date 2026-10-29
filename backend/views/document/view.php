@@ -80,10 +80,13 @@ $canCompleteAssignment = $identity instanceof User
         )
     );
 $staffItems = ArrayHelper::map($staffUsers, 'id', 'username');
-$canAdjustStampPositions = $model->status === Document::STATUS_REGISTERED && $canRegisterDocument;
+$showStampPositionTools = true;
+$canAdjustStampPositions = $showStampPositionTools && $model->status === Document::STATUS_REGISTERED && $canRegisterDocument;
+$useBrowserPdfPreview = $previewImageUrl === null && $previewPdfUrl !== null && $canAdjustStampPositions;
 $departmentItems = ArrayHelper::map($departments, 'id', 'name');
 $attachmentFiles = array_values(array_filter($model->files, static fn (DocumentFile $file): bool => $file->file_type === DocumentFile::TYPE_ATTACHMENT));
 $csrf = Html::hiddenInput(Yii::$app->request->csrfParam, Yii::$app->request->csrfToken);
+$showDebugRestamp = false;
 $latestDeputyStamp = null;
 $latestDirectorStamp = null;
 foreach ($model->stamps as $stamp) {
@@ -147,6 +150,13 @@ $thaiDateTime = static function (int|string|null $value): string {
         . ' ' . ((int) date('Y', $timestamp) + 543)
         . ' เวลา ' . date('H:i', $timestamp) . ' น.';
 };
+
+if ($useBrowserPdfPreview) {
+    $this->registerJsFile('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs', [
+        'type' => 'module',
+        'position' => \yii\web\View::POS_HEAD,
+    ]);
+}
 ?>
 
 <div class="eoffice-page">
@@ -172,7 +182,7 @@ $thaiDateTime = static function (int|string|null $value): string {
                     <?php if ($stampedPdfUrl): ?>
                         <?= Html::a('<i class="bi bi-file-earmark-check" aria-hidden="true"></i><span>เปิด PDF ตราประทับ</span>', $stampedPdfUrl, ['class' => 'btn btn-success stamped-pdf-button', 'target' => '_blank']) ?>
                     <?php endif; ?>
-                    <?php if ($canRegisterDocument): ?>
+                    <?php if ($showDebugRestamp && $canRegisterDocument): ?>
                         <?= Html::beginForm(['generate-stamped-pdf', 'id' => $model->id], 'post', ['class' => 'inline-form']) ?>
                             <?= $csrf ?>
                             <?= Html::submitButton('<i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>Debug re-stamp</span>', [
@@ -216,11 +226,27 @@ $thaiDateTime = static function (int|string|null $value): string {
                             </div>
                         <?php endif; ?>
                     </div>
+                <?php elseif ($useBrowserPdfPreview): ?>
+                    <div class="fallback-warning pdfjs-preview-status">
+                        shared host ไม่สามารถสร้างภาพ preview จาก server ได้ ระบบจึง render หน้าแรกด้วย browser เพื่อปรับตำแหน่งตราประทับ
+                    </div>
+                    <div class="pdf-preview-canvas pdfjs-preview-canvas" data-page-width="216" data-page-height="297" data-pdf-url="<?= Html::encode($previewPdfUrl) ?>">
+                        <canvas class="pdf-page-image pdfjs-page-canvas" aria-label="<?= Html::encode($previewLabel . ' ' . $model->receive_no) ?>"></canvas>
+                        <div class="stamp-preview-layer" aria-hidden="true">
+                            <?php foreach ($stampPositionDefaults as $type => $config): ?>
+                                <div
+                                    class="stamp-preview-box stamp-preview-<?= Html::encode($type) ?>"
+                                    data-stamp-box="<?= Html::encode($type) ?>"
+                                    data-width-mm="<?= Html::encode((string) $config['w']) ?>"
+                                    data-height-mm="<?= Html::encode((string) $config['h']) ?>"
+                                >
+                                    <span><?= Html::encode($config['label']) ?></span>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
                 <?php elseif ($previewPdfUrl): ?>
                     <div class="pdf-preview-fallback">
-                        <div class="fallback-warning">
-                            ไม่สามารถสร้างภาพ preview หน้าแรกได้ จึงแสดง PDF เต็มฉบับแทนชั่วคราว
-                        </div>
                         <iframe
                             class="pdf-preview"
                             src="<?= Html::encode($previewPdfUrl) ?>#toolbar=1&navpanes=0&view=FitH"
@@ -456,6 +482,7 @@ $this->registerJs(<<<'JS'
     const pageWidth = parseFloat(canvas.dataset.pageWidth || '216');
     let pageHeight = parseFloat(canvas.dataset.pageHeight || '297');
     const pageImage = canvas.querySelector('.pdf-page-image');
+    const pdfjsCanvas = canvas.querySelector('.pdfjs-page-canvas');
 
     function rounded(value) {
         return (Math.round(parseFloat(value || '0') * 10) / 10).toString();
@@ -492,7 +519,7 @@ $this->registerJs(<<<'JS'
         updateStamp(type);
     });
 
-    if (pageImage) {
+    if (pageImage && !pdfjsCanvas) {
         pageImage.addEventListener('load', () => {
             if (pageImage.naturalWidth > 0) {
                 pageHeight = pageWidth * (pageImage.naturalHeight / pageImage.naturalWidth);
@@ -503,6 +530,50 @@ $this->registerJs(<<<'JS'
             }
         });
     }
+
+    async function renderPdfPreview() {
+        if (!pdfjsCanvas || !canvas.dataset.pdfUrl) {
+            return;
+        }
+
+        const status = document.querySelector('.pdfjs-preview-status');
+        try {
+            const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs');
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
+
+            const pdf = await pdfjsLib.getDocument(canvas.dataset.pdfUrl).promise;
+            const page = await pdf.getPage(1);
+            const baseViewport = page.getViewport({scale: 1});
+            pageHeight = pageWidth * (baseViewport.height / baseViewport.width);
+
+            const containerWidth = canvas.clientWidth || 780;
+            const scale = containerWidth / baseViewport.width;
+            const viewport = page.getViewport({scale});
+            const context = pdfjsCanvas.getContext('2d');
+            pdfjsCanvas.width = Math.floor(viewport.width);
+            pdfjsCanvas.height = Math.floor(viewport.height);
+
+            await page.render({canvasContext: context, viewport}).promise;
+            pdfjsCanvas.style.width = '100%';
+            pdfjsCanvas.style.height = 'auto';
+
+            document.querySelectorAll('[data-axis="y"]').forEach((input) => {
+                input.max = rounded(pageHeight);
+            });
+            document.querySelectorAll('[data-stamp-control]').forEach((control) => updateStamp(control.dataset.stampControl));
+
+            if (status) {
+                status.textContent = 'แสดง preview หน้าแรกด้วย browser สำหรับปรับตำแหน่งตราประทับ';
+            }
+        } catch (error) {
+            if (status) {
+                status.textContent = 'ไม่สามารถ render preview ด้วย browser ได้ กรุณาเปิด PDF เต็มฉบับเพื่อตรวจเอกสาร';
+            }
+            console.error(error);
+        }
+    }
+
+    renderPdfPreview();
 })();
 JS);
 ?>

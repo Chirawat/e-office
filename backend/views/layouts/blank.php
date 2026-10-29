@@ -19,6 +19,7 @@ AppAsset::register($this);
     <?php $this->registerCsrfMetaTags() ?>
     <title><?= Html::encode($this->title) ?></title>
     <?php $this->head() ?>
+    <?= $this->render('_analytics') ?>
 </head>
 <body class="d-flex flex-column justify-content-center align-items-center vh-100">
 <?php $this->beginBody() ?>

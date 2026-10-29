@@ -69,6 +69,11 @@ class UserUpdateForm extends Model
         } elseif (isset($data[$scope]['signatureFile'])) {
             unset($data[$scope]['signatureFile']);
         }
+        if ($scope === '' && isset($data['department_ids']) && !is_array($data['department_ids'])) {
+            $data['department_ids'] = $data['department_ids'] === '' ? [] : [$data['department_ids']];
+        } elseif (isset($data[$scope]['department_ids']) && !is_array($data[$scope]['department_ids'])) {
+            $data[$scope]['department_ids'] = $data[$scope]['department_ids'] === '' ? [] : [$data[$scope]['department_ids']];
+        }
 
         $loaded = parent::load($data, $formName);
         $this->signatureFile = UploadedFile::getInstance($this, 'signatureFile');
@@ -121,7 +126,10 @@ class UserUpdateForm extends Model
             return false;
         }
 
-        $this->saveSignatureFile();
+        if (!$this->saveSignatureFile()) {
+            return false;
+        }
+
         $this->syncDepartments();
 
         return true;
@@ -149,20 +157,75 @@ class UserUpdateForm extends Model
         ));
     }
 
-    private function saveSignatureFile(): void
+    private function saveSignatureFile(): bool
     {
         if ($this->signatureFile === null) {
-            return;
+            return true;
         }
 
-        $extension = strtolower($this->signatureFile->extension ?: 'png');
         $dir = Yii::getAlias('@backend/web/uploads/signatures/' . $this->user->id);
-        FileHelper::createDirectory($dir);
+        try {
+            FileHelper::createDirectory($dir, 0775, true);
+        } catch (\Throwable $e) {
+            Yii::error($e, __METHOD__);
+            $this->addError('signatureFile', 'ไม่สามารถสร้างโฟลเดอร์ลายเซ็นได้: ' . $dir);
+            return false;
+        }
 
-        $path = $dir . '/signature.' . $extension;
-        $this->signatureFile->saveAs($path);
+        if (!is_writable($dir)) {
+            $this->addError('signatureFile', 'โฟลเดอร์ลายเซ็นเขียนไฟล์ไม่ได้: ' . $dir);
+            return false;
+        }
 
-        $this->user->signature_path = 'uploads/signatures/' . $this->user->id . '/signature.' . $extension;
+        $path = $dir . '/signature.jpg';
+        try {
+            if (!$this->writeNormalizedSignatureImage((string) $this->signatureFile->tempName, $path)) {
+                $this->addError('signatureFile', 'ไม่สามารถแปลงและบันทึกไฟล์ลายเซ็นได้ กรุณาตรวจสอบว่า PHP เปิดใช้ GD extension แล้ว');
+                return false;
+            }
+        } catch (\Throwable $e) {
+            Yii::error($e, __METHOD__);
+            $this->addError('signatureFile', 'ไม่สามารถบันทึกไฟล์ลายเซ็นได้: ' . $e->getMessage());
+            return false;
+        }
+
+        $this->user->signature_path = 'uploads/signatures/' . $this->user->id . '/signature.jpg';
         $this->user->save(false, ['signature_path', 'updated_at']);
+
+        return true;
+    }
+
+    private function writeNormalizedSignatureImage(string $sourcePath, string $targetPath): bool
+    {
+        if (!is_file($sourcePath) || !is_readable($sourcePath)) {
+            return false;
+        }
+
+        if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg')) {
+            return false;
+        }
+
+        $contents = file_get_contents($sourcePath);
+        if ($contents === false) {
+            return false;
+        }
+
+        $source = @imagecreatefromstring($contents);
+        if ($source === false) {
+            return false;
+        }
+
+        $width = imagesx($source);
+        $height = imagesy($source);
+        $canvas = imagecreatetruecolor($width, $height);
+        $white = imagecolorallocate($canvas, 255, 255, 255);
+        imagefilledrectangle($canvas, 0, 0, $width, $height, $white);
+        imagecopy($canvas, $source, 0, 0, 0, 0, $width, $height);
+
+        $saved = imagejpeg($canvas, $targetPath, 95);
+        imagedestroy($source);
+        imagedestroy($canvas);
+
+        return $saved;
     }
 }

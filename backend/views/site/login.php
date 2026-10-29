@@ -16,6 +16,14 @@ $htmlIcon = <<<HTML
 {label}<div class="input-group"><span class="input-group-text" aria-hidden="true"><i class="bi %s"></i></span>{input}</div>{error}{hint}
 HTML;
 $labelOptions = ['class' => 'form-label fw-semibold'];
+$demoAccounts = [
+    ['role' => 'ผู้ดูแลระบบ', 'username' => 'admin_demo'],
+    ['role' => 'เจ้าหน้าที่ธุรการ', 'username' => 'officer_demo'],
+    ['role' => 'หัวหน้ากลุ่มงาน', 'username' => 'staff_academic_demo'],
+    ['role' => 'รอง ผอ.', 'username' => 'deputy_demo'],
+    ['role' => 'ผอ.', 'username' => 'director_demo'],
+    ['role' => 'ผู้ใช้ทั่วไป', 'username' => 'teacher_demo'],
+];
 ?>
 <div class="card border-0 overflow-hidden login-split-card eoffice-login-card">
     <div class="row g-0">
@@ -92,6 +100,24 @@ $labelOptions = ['class' => 'form-label fw-semibold'];
                 </div>
 
                 <?php ActiveForm::end(); ?>
+
+                <div class="demo-login-box">
+                    <div class="demo-login-head">
+                        <i class="bi bi-key" aria-hidden="true"></i>
+                        <strong>บัญชีทดลองสำหรับ Demo</strong>
+                    </div>
+                    <div class="demo-login-password">
+                        รหัสผ่านทุกบัญชี: <code>Demo@1234</code>
+                    </div>
+                    <div class="demo-login-list">
+                        <?php foreach ($demoAccounts as $account): ?>
+                            <div>
+                                <span><?= Html::encode($account['role']) ?></span>
+                                <code><?= Html::encode($account['username']) ?></code>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
 
                 <p class="login-footnote">
                     สำหรับผู้ใช้งานภายในโรงเรียนเท่านั้น หากลืมรหัสผ่านให้ติดต่อผู้ดูแลระบบ

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace common\components;
 
 use common\models\Document;
+use common\models\Memo;
 use common\models\User;
 use Yii;
 use yii\helpers\Url;
@@ -35,6 +36,26 @@ class LineMessagingService
 
         $lines[] = '';
         $lines[] = 'เปิดงาน: ' . Url::to(['/document/view', 'id' => $document->id], true);
+
+        return $this->pushText($recipient->line_user_id, implode("\n", $lines));
+    }
+
+    public function notifyMemo(User $recipient, Memo $memo, User $actor, string $message): bool
+    {
+        if ($recipient->line_user_id === null || $recipient->line_user_id === '') {
+            Yii::warning('LINE notification skipped: recipient has no line_user_id. user_id=' . $recipient->id, __METHOD__);
+            return false;
+        }
+
+        $lines = [
+            $message,
+            '',
+            'บันทึกเสนอ: ' . ($memo->memo_no ?: 'ยังไม่ระบุเลขที่'),
+            'เรื่อง: ' . $memo->subject,
+            'ผู้ดำเนินการ: ' . $actor->username,
+            '',
+            'เปิดบันทึก: ' . Url::to(['/memo/view', 'id' => $memo->id], true),
+        ];
 
         return $this->pushText($recipient->line_user_id, implode("\n", $lines));
     }

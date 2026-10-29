@@ -17,23 +17,27 @@ use yii\helpers\FileHelper;
 class PdfStampService extends Component
 {
     private const SHOW_NOTE_DEBUG_FRAMES = false;
+    private const NOTE_SIGNATURE_WIDTH = 42.0;
+    private const NOTE_SIGNATURE_HEIGHT = 14.0;
 
     private const DEPUTY_NOTE_LAYOUT = [
-        'signature_width' => 50.0,
-        'signature_x_offset' => 10.0,
+        'signature_width' => self::NOTE_SIGNATURE_WIDTH,
+        'signature_height' => self::NOTE_SIGNATURE_HEIGHT,
+        'signature_x_offset' => 13.0,
         'signature_y_offset' => 1.0,
         'date_x_offset' => 0.0,
-        'date_y_offset' => 20.0,
+        'date_y_offset' => 15.0,
         'date_width' => 30.0,
         'date_align_to_signature' => true,
     ];
 
     private const DIRECTOR_NOTE_LAYOUT = [
-        'signature_width' =>50.0,
-        'signature_x_offset' => 10.0,
+        'signature_width' => self::NOTE_SIGNATURE_WIDTH,
+        'signature_height' => self::NOTE_SIGNATURE_HEIGHT,
+        'signature_x_offset' => 11.0,
         'signature_y_offset' => 5.0,
         'date_x_offset' => 0.0,
-        'date_y_offset' => 20.0,
+        'date_y_offset' => 15.0,
         'date_width' => 30.0,
         'date_align_to_signature' => true,
     ];
@@ -233,9 +237,11 @@ class PdfStampService extends Component
         $dateY = $contentBottomY + (float) ($layout['date_y_offset_without_signature'] ?? 0);
         if ($signaturePath !== null) {
             $signatureWidth = (float) ($layout['signature_width'] ?? ($w * 0.5));
+            $signatureHeight = (float) ($layout['signature_height'] ?? 14.0);
             $signatureX = $x + (float) ($layout['signature_x_offset'] ?? ($w * 0.38));
             $signatureY = $contentBottomY + (float) ($layout['signature_y_offset'] ?? 1);
-            $pdf->Image($signaturePath, $signatureX, $signatureY, $signatureWidth, 0, '', '', '', false, 300);
+            [$imageX, $imageY, $imageWidth, $imageHeight] = $this->containedImageBox($signaturePath, $signatureX, $signatureY, $signatureWidth, $signatureHeight);
+            $pdf->Image($signaturePath, $imageX, $imageY, $imageWidth, $imageHeight, '', '', '', false, 300);
             $dateY = $signatureY + (float) ($layout['date_y_offset'] ?? 13);
         }
         $pdf->SetFont('freeserif', 'I', 9.5);
@@ -248,6 +254,7 @@ class PdfStampService extends Component
     {
         $frameHeight = max((float) ($layout['debug_height'] ?? 46), ($contentBottomY - $y) + 22);
         $signatureWidth = (float) ($layout['signature_width'] ?? ($w * 0.5));
+        $signatureHeight = (float) ($layout['signature_height'] ?? 14.0);
         $signatureX = $x + (float) ($layout['signature_x_offset'] ?? ($w * 0.38));
         $signatureY = $contentBottomY + (float) ($layout['signature_y_offset'] ?? 1);
         [$dateX, $dateWidth] = $this->dateLayout($x, $w, $layout);
@@ -257,7 +264,7 @@ class PdfStampService extends Component
         $pdf->Rect($x, $y, $w, $frameHeight);
 
         $pdf->SetLineStyle(['width' => 0.15, 'dash' => '1,1', 'color' => [37, 99, 235]]);
-        $pdf->Rect($signatureX, $signatureY, $signatureWidth, 10);
+        $pdf->Rect($signatureX, $signatureY, $signatureWidth, $signatureHeight);
         $pdf->Rect($dateX, $dateY, $dateWidth, 5.2);
 
         $pdf->SetTextColor(220, 38, 38);
@@ -285,6 +292,27 @@ class PdfStampService extends Component
         }
 
         return [$dateX, $dateWidth, $dateAlign];
+    }
+
+    /**
+     * @return array{0: float, 1: float, 2: float, 3: float}
+     */
+    private function containedImageBox(string $path, float $x, float $y, float $boxWidth, float $boxHeight): array
+    {
+        $size = @getimagesize($path);
+        if ($size === false || (int) $size[0] <= 0 || (int) $size[1] <= 0) {
+            return [$x, $y, $boxWidth, $boxHeight];
+        }
+
+        $sourceWidth = (float) $size[0];
+        $sourceHeight = (float) $size[1];
+        $scale = min($boxWidth / $sourceWidth, $boxHeight / $sourceHeight);
+        $imageWidth = $sourceWidth * $scale;
+        $imageHeight = $sourceHeight * $scale;
+        $imageX = $x + (($boxWidth - $imageWidth) / 2);
+        $imageY = $y + (($boxHeight - $imageHeight) / 2);
+
+        return [$imageX, $imageY, $imageWidth, $imageHeight];
     }
 
     private function buddhistDate(string $date): string
@@ -338,7 +366,50 @@ class PdfStampService extends Component
 
         $path = Yii::getAlias('@backend/web/' . ltrim($user->signature_path, '/'));
 
-        return is_file($path) ? $path : null;
+        if (!is_file($path)) {
+            return null;
+        }
+
+        return $this->pdfSafeSignaturePath($path);
+    }
+
+    private function pdfSafeSignaturePath(string $sourcePath): string
+    {
+        $extension = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION));
+        if (in_array($extension, ['jpg', 'jpeg'], true)) {
+            return $sourcePath;
+        }
+
+        $targetPath = dirname($sourcePath) . '/signature-pdf-safe.jpg';
+        if (is_file($targetPath) && filemtime($targetPath) >= filemtime($sourcePath)) {
+            return $targetPath;
+        }
+
+        if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg')) {
+            return $sourcePath;
+        }
+
+        $contents = @file_get_contents($sourcePath);
+        if ($contents === false) {
+            return $sourcePath;
+        }
+
+        $source = @imagecreatefromstring($contents);
+        if ($source === false) {
+            return $sourcePath;
+        }
+
+        $width = imagesx($source);
+        $height = imagesy($source);
+        $canvas = imagecreatetruecolor($width, $height);
+        $white = imagecolorallocate($canvas, 255, 255, 255);
+        imagefilledrectangle($canvas, 0, 0, $width, $height, $white);
+        imagecopy($canvas, $source, 0, 0, 0, 0, $width, $height);
+        $saved = imagejpeg($canvas, $targetPath, 95);
+        imagedestroy($source);
+        imagedestroy($canvas);
+
+        return $saved ? $targetPath : $sourcePath;
     }
 
     private function stampPosition(Document $document, string $type, float $defaultX, float $defaultY, float $pageWidth, float $pageHeight): array
@@ -377,20 +448,41 @@ class PdfStampService extends Component
     private function pdftoppmBinary(): ?string
     {
         $candidates = [
+            getenv('EOFFICE_PDFTOPPM') ?: null,
             Yii::getAlias('@app/../runtime/poppler/bin/pdftoppm'),
-            '/Users/chirawat/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/pdftoppm',
-            '/opt/homebrew/bin/pdftoppm',
-            '/usr/local/bin/pdftoppm',
             '/usr/bin/pdftoppm',
+            '/usr/local/bin/pdftoppm',
         ];
 
         foreach ($candidates as $candidate) {
-            if (is_executable($candidate)) {
+            if ($candidate !== null && $this->isPathAllowedByOpenBasedir($candidate) && is_executable($candidate)) {
                 return $candidate;
             }
         }
 
         return null;
+    }
+
+    private function isPathAllowedByOpenBasedir(string $path): bool
+    {
+        $openBasedir = (string) ini_get('open_basedir');
+        if ($openBasedir === '') {
+            return true;
+        }
+
+        $path = rtrim($path, DIRECTORY_SEPARATOR);
+        foreach (explode(PATH_SEPARATOR, $openBasedir) as $allowedPath) {
+            $allowedPath = rtrim($allowedPath, DIRECTORY_SEPARATOR);
+            if ($allowedPath === '') {
+                continue;
+            }
+
+            if ($path === $allowedPath || str_starts_with($path, $allowedPath . DIRECTORY_SEPARATOR)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function popplerLibraryPath(string $binary): ?string

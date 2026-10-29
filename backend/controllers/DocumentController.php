@@ -12,6 +12,7 @@ use common\models\Department;
 use common\models\Document;
 use common\models\DocumentAssignment;
 use common\models\DocumentStamp;
+use common\models\Memo;
 use common\models\User;
 use common\models\WorkflowAction;
 use Yii;
@@ -55,24 +56,26 @@ class DocumentController extends Controller
 
     public function actionIndex(): string
     {
-        $query = Document::find()->with(['department', 'originalFile'])->orderBy(['id' => SORT_DESC]);
+        $query = Document::find()
+            ->with(['department', 'originalFile'])
+            ->orderBy(['{{%document}}.[[id]]' => SORT_DESC]);
         $keyword = trim((string) Yii::$app->request->get('q', ''));
         $identity = Yii::$app->user->identity;
         if ($identity instanceof User && !$identity->hasRole(User::ROLE_ADMIN)) {
             if ($identity->hasRole(User::ROLE_DEPUTY_DIRECTOR)) {
-                $query->andWhere(['status' => [Document::STATUS_SUBMITTED_TO_DEPUTY, Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_RETURNED]]);
+                $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DEPUTY, Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_RETURNED]]);
             } elseif ($identity->hasRole(User::ROLE_DIRECTOR)) {
-                $query->andWhere(['status' => [Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
+                $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
             } elseif ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
-                $query->andWhere(['status' => [Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
+                $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
                 $this->applyStaffAssignmentScope($query, $identity);
             }
         }
         if ($keyword !== '') {
             $query->andWhere([
                 'or',
-                ['like', 'subject', $keyword],
-                ['like', 'external_no', $keyword],
+                ['like', '{{%document}}.[[subject]]', $keyword],
+                ['like', '{{%document}}.[[external_no]]', $keyword],
             ]);
         }
 
@@ -95,7 +98,13 @@ class DocumentController extends Controller
         }
 
         $statuses = $this->myWorkStatuses($identity);
-        $keyword = trim((string) Yii::$app->request->get('q', ''));
+        $keyword = trim((string) Yii::$app->request->get('q_doc', Yii::$app->request->get('q', '')));
+        $memoKeyword = trim((string) Yii::$app->request->get('q_memo', ''));
+        $showMemoWorkbench = $identity->hasRole([User::ROLE_STAFF, User::ROLE_DEPUTY_DIRECTOR, User::ROLE_DIRECTOR]);
+        $activeTab = (string) Yii::$app->request->get('tab', 'document');
+        if (!$showMemoWorkbench || $activeTab !== 'memo') {
+            $activeTab = 'document';
+        }
         $query = Document::find()
             ->with(['department', 'originalFile'])
             ->where(['{{%document}}.[[status]]' => $statuses])
@@ -116,12 +125,43 @@ class DocumentController extends Controller
             'pagination' => ['pageSize' => 20],
         ]);
 
+        $memoDataProvider = null;
+        $memoTotal = 0;
+        if ($showMemoWorkbench) {
+            $memoQuery = Memo::find()
+                ->with(['department', 'creator', 'currentActor'])
+                ->orderBy(['updated_at' => SORT_DESC, 'id' => SORT_DESC]);
+            $this->applyMemoWorkbenchScope($memoQuery, $identity);
+            if ($memoKeyword !== '') {
+                $memoQuery->andWhere([
+                    'or',
+                    ['like', 'subject', $memoKeyword],
+                    ['like', 'memo_no', $memoKeyword],
+                ]);
+            }
+
+            $memoDataProvider = new ActiveDataProvider([
+                'query' => $memoQuery,
+                'pagination' => [
+                    'pageSize' => 20,
+                    'pageParam' => 'memo-page',
+                    'pageSizeParam' => 'memo-per-page',
+                ],
+            ]);
+            $memoTotal = $memoDataProvider->getTotalCount();
+        }
+
         return $this->render('my', [
             'dataProvider' => $dataProvider,
             'statuses' => $statuses,
             'roleLabel' => $identity->roleLabel(),
             'summary' => $this->myWorkSummary($statuses, $identity),
             'keyword' => $keyword,
+            'memoDataProvider' => $memoDataProvider,
+            'memoKeyword' => $memoKeyword,
+            'memoTotal' => $memoTotal,
+            'showMemoWorkbench' => $showMemoWorkbench,
+            'activeTab' => $activeTab,
         ]);
     }
 
@@ -153,6 +193,9 @@ class DocumentController extends Controller
         if (!$this->canCurrentUserViewDocument($model)) {
             throw new ForbiddenHttpException('คุณไม่มีสิทธิ์ดูหนังสือของกลุ่มงานอื่น');
         }
+
+        $this->regenerateStampedPdfForPreview($model);
+        $model = $this->findModel($id);
 
         $identity = Yii::$app->user->identity;
         $staffQuery = User::find()
@@ -596,6 +639,24 @@ class DocumentController extends Controller
             ->distinct();
     }
 
+    private function applyMemoWorkbenchScope($query, User $identity): void
+    {
+        if ($identity->hasRole(User::ROLE_ADMIN)) {
+            $query->andWhere(['not in', 'status', [Memo::STATUS_COMPLETED]]);
+            return;
+        }
+
+        $query->andWhere([
+            'or',
+            ['current_actor_id' => $identity->id],
+            [
+                'and',
+                ['created_by' => $identity->id],
+                ['status' => [Memo::STATUS_DRAFT, Memo::STATUS_RETURNED, Memo::STATUS_APPROVED]],
+            ],
+        ]);
+    }
+
     private function canCurrentUserViewDocument(Document $model): bool
     {
         $identity = Yii::$app->user->identity;
@@ -641,6 +702,21 @@ class DocumentController extends Controller
                 Yii::$app->session->addFlash('warning', 'บันทึก workflow แล้ว แต่สร้าง PDF ประทับตราอัตโนมัติไม่สำเร็จ: ' . $e->getMessage());
             }
         }
+    }
+
+    private function regenerateStampedPdfForPreview(Document $model): void
+    {
+        $stampedFile = $model->stampedFile;
+        if ($stampedFile === null || !$stampedFile->storage_path) {
+            return;
+        }
+
+        $stampedPath = Yii::getAlias('@backend/web/' . ltrim($stampedFile->storage_path, '/'));
+        if (!is_file($stampedPath)) {
+            return;
+        }
+
+        $this->regenerateStampedPdf($model, false);
     }
 
     private function stampPositionDefaults(): array
