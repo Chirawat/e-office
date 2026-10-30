@@ -16,6 +16,9 @@ use yii\web\IdentityInterface;
  *
  * @property int $id
  * @property string $username
+ * @property string|null $fullname
+ * @property string|null $phone
+ * @property string|null $id_card
  * @property string $password_hash
  * @property string|null $password_reset_token
  * @property string $verification_token
@@ -76,6 +79,9 @@ class User extends ActiveRecord implements IdentityInterface
             ['role', 'in', 'range' => array_keys(self::roleOptions())],
             ['department_id', 'integer'],
             ['department_id', 'exist', 'targetClass' => Department::class, 'targetAttribute' => ['department_id' => 'id']],
+            [['fullname'], 'string', 'max' => 150],
+            [['phone'], 'string', 'max' => 30],
+            [['id_card'], 'string', 'max' => 20],
             ['signature_path', 'string', 'max' => 500],
             [['line_link_token_expires_at', 'line_linked_at'], 'integer'],
             [['line_user_id'], 'string', 'max' => 80],
@@ -87,6 +93,10 @@ class User extends ActiveRecord implements IdentityInterface
     public function attributeLabels(): array
     {
         return [
+            'username' => 'ชื่อผู้ใช้',
+            'fullname' => 'ชื่อ-นามสกุล',
+            'phone' => 'เบอร์โทรศัพท์',
+            'id_card' => 'เลขประจำตัวประชาชน',
             'role' => 'บทบาทผู้ใช้',
             'department_id' => 'กลุ่มงาน',
             'signature_path' => 'ไฟล์ลายเซ็น',
@@ -141,6 +151,25 @@ class User extends ActiveRecord implements IdentityInterface
         }
 
         return in_array((int) $departmentId, $this->departmentIds(), true);
+    }
+
+    public function displayName(): string
+    {
+        return !empty($this->fullname) ? $this->fullname : $this->username;
+    }
+
+    public static function statusOptions(): array
+    {
+        return [
+            self::STATUS_ACTIVE => 'เปิดใช้งาน',
+            self::STATUS_INACTIVE => 'รออนุมัติ / พักใช้งาน',
+            self::STATUS_DELETED => 'ปิดใช้งาน',
+        ];
+    }
+
+    public function statusLabel(): string
+    {
+        return self::statusOptions()[$this->status] ?? (string) $this->status;
     }
 
     public function roleLabel(): string

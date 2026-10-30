@@ -60,6 +60,52 @@ class LineMessagingService
         return $this->pushText($recipient->line_user_id, implode("\n", $lines));
     }
 
+    public function notifyAdminNewTeacherSignup(User $newTeacher): void
+    {
+        // ค้นหาผู้ดูแลระบบที่มี line_user_id
+        $admins = User::find()
+            ->where(['role' => User::ROLE_ADMIN, 'status' => User::STATUS_ACTIVE])
+            ->andWhere(['is not', 'line_user_id', null])
+            ->all();
+
+        $deptName = $newTeacher->department?->name ?? 'ไม่ระบุ';
+        $lines = [
+            '🔔 มีคุณครูสมัครใช้งาน e-Office ใหม่',
+            '',
+            'ชื่อ-นามสกุล: ' . $newTeacher->displayName(),
+            'ชื่อผู้ใช้: ' . $newTeacher->username,
+            'เบอร์โทร: ' . ($newTeacher->phone ?: '-'),
+            'กลุ่มงาน: ' . $deptName,
+            'สถานะ: รอการอนุมัติ',
+            '',
+            'ตรวจสอบและอนุมัติได้ที่: ' . Url::to(['/user/index', 'status' => User::STATUS_INACTIVE], true),
+        ];
+
+        $message = implode("\n", $lines);
+        foreach ($admins as $admin) {
+            $this->pushText($admin->line_user_id, $message);
+        }
+    }
+
+    public function notifyTeacherApproved(User $teacher): bool
+    {
+        if ($teacher->line_user_id === null || $teacher->line_user_id === '') {
+            return false;
+        }
+
+        $lines = [
+            '🎉 บัญชี e-Office ของคุณได้รับการอนุมัติแล้ว',
+            '',
+            'ยินดีต้อนรับคุณครู ' . $teacher->displayName(),
+            'กลุ่มงาน: ' . ($teacher->department?->name ?? 'ทั่วไป'),
+            'บทบาท: ' . $teacher->roleLabel(),
+            '',
+            'ท่านสามารถเข้าสู่ระบบ e-Office ได้ทันทีที่: ' . Url::to(['/site/login'], true),
+        ];
+
+        return $this->pushText($teacher->line_user_id, implode("\n", $lines));
+    }
+
     public function pushText(string $lineUserId, string $text): bool
     {
         return $this->send('/message/push', [

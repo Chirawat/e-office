@@ -6,6 +6,7 @@ namespace backend\controllers;
 
 use backend\models\UserCreateForm;
 use backend\models\UserUpdateForm;
+use common\components\LineMessagingService;
 use common\models\Department;
 use common\models\User;
 use Yii;
@@ -36,13 +37,15 @@ class UserController extends Controller
                 'class' => VerbFilter::class,
                 'actions' => [
                     'update-role' => ['post'],
+                    'approve' => ['post'],
+                    'reset-password' => ['post'],
                     'delete' => ['post'],
                 ],
             ],
         ];
     }
 
-    public function actionIndex(): string
+    public function actionIndex(?int $status = null): string
     {
         $this->requireAdmin();
         $roleOrder = sprintf(
@@ -56,16 +59,69 @@ class UserController extends Controller
         );
         $query = User::find()
             ->with(['department', 'departments'])
-            ->where(['<>', 'status', User::STATUS_DELETED])
             ->orderBy(new Expression($roleOrder))
             ->addOrderBy(['username' => SORT_ASC, 'id' => SORT_ASC]);
+
+        if ($status !== null) {
+            $query->andWhere(['status' => $status]);
+        } else {
+            $query->andWhere(['<>', 'status', User::STATUS_DELETED]);
+        }
+
+        $pendingCount = (int) User::find()->where(['status' => User::STATUS_INACTIVE])->count();
+        $activeCount = (int) User::find()->where(['status' => User::STATUS_ACTIVE])->count();
 
         return $this->render('index', [
             'dataProvider' => new ActiveDataProvider([
                 'query' => $query,
                 'pagination' => ['pageSize' => 20],
             ]),
+            'currentStatus' => $status,
+            'pendingCount' => $pendingCount,
+            'activeCount' => $activeCount,
         ]);
+    }
+
+    public function actionApprove(int $id): Response
+    {
+        $this->requireAdmin();
+        $model = $this->findModel($id);
+
+        if ($model->status === User::STATUS_ACTIVE) {
+            Yii::$app->session->setFlash('info', 'ผู้ใช้นี้ได้รับการอนุมัติใช้งานอยู่แล้ว');
+            return $this->redirect(['index']);
+        }
+
+        $model->status = User::STATUS_ACTIVE;
+        if ($model->save(false, ['status', 'updated_at'])) {
+            // แจ้งเตือนครูผ่าน LINE ถ้าเชื่อมต่อไว้
+            try {
+                (new LineMessagingService())->notifyTeacherApproved($model);
+            } catch (\Throwable $e) {
+                Yii::error('Failed to notify teacher via LINE: ' . $e->getMessage(), __METHOD__);
+            }
+
+            Yii::$app->session->setFlash('success', 'อนุมัติผู้ใช้งาน ' . $model->displayName() . ' เรียบร้อยแล้ว');
+        }
+
+        return $this->redirect(['index', 'status' => User::STATUS_INACTIVE]);
+    }
+
+    public function actionResetPassword(int $id): Response
+    {
+        $this->requireAdmin();
+        $model = $this->findModel($id);
+
+        // กำหนดรหัสผ่านเริ่มต้นใหม่
+        $defaultPassword = 'Kc@' . random_int(100000, 999999);
+        $model->setPassword($defaultPassword);
+        $model->generateAuthKey();
+
+        if ($model->save(false, ['password_hash', 'auth_key', 'updated_at'])) {
+            Yii::$app->session->setFlash('success', "รีเซ็ตรหัสผ่านสำหรับ <strong>{$model->displayName()}</strong> เรียบร้อยแล้ว<br>รหัสผ่านใหม่คือ: <strong class='fs-5 text-danger font-monospace'>{$defaultPassword}</strong> (กรุณาแจ้งให้ผู้ใช้งานทราบ)");
+        }
+
+        return $this->redirect(['index']);
     }
 
     public function actionCreate(): Response|string

@@ -11,4 +11,7 @@ return [
     'user.passwordMinLength' => 8,
     'line.channelAccessToken' => '',
     'line.channelSecret' => '',
+    'line.loginChannelId' => '',
+    'line.loginChannelSecret' => '',
+    'line.loginCallbackUrl' => '',
 ];
