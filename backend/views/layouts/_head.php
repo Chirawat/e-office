@@ -7,6 +7,7 @@ declare(strict_types=1);
 use backend\assets\AppAsset;
 
 AppAsset::register($this);
+$this->registerCssFile('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap');
 $this->registerCssFile('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css');
 
 $this->registerCsrfMetaTags();

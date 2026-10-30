@@ -1880,3 +1880,139 @@
     color: #27364f;
     overflow-wrap: anywhere;
 }
+
+/* ==========================================================================
+   N ACADEMY ENTERPRISE ERP THEME (TUTORING-SCHOOL STYLE)
+   ========================================================================== */
+
+:root {
+    --erp-blue-dark: #003366;
+    --erp-blue-primary: #084b96;
+    --erp-blue-light: #0d6efd;
+    --erp-blue-accent: #38bdf8;
+    --erp-bg-body: #edf2f7;
+    --erp-border-color: #dce4ec;
+}
+
+body, .eoffice-body {
+    font-family: 'Prompt', 'Sarabun', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    background-color: var(--erp-bg-body) !important;
+    color: #1e293b !important;
+}
+
+/* NAVBAR / TOPBAR: DEEP NAVY GRADIENT */
+.eoffice-navbar {
+    background: linear-gradient(90deg, #063c78 0%, #084b96 50%, #0a56aa 100%) !important;
+    box-shadow: 0 2px 8px rgba(0, 51, 102, 0.2) !important;
+    border-bottom: 2px solid var(--erp-blue-accent) !important;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+}
+
+.eoffice-navbar .navbar-brand {
+    font-family: 'Prompt', sans-serif !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.5px !important;
+    color: #ffffff !important;
+}
+
+.eoffice-navbar .nav-link {
+    font-family: 'Prompt', sans-serif !important;
+    font-size: 0.88rem !important;
+    font-weight: 500 !important;
+    padding: 6px 12px !important;
+    border-radius: 6px !important;
+    transition: all 0.2s ease !important;
+}
+
+.eoffice-navbar .nav-link:hover,
+.eoffice-navbar .nav-link:focus {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    color: #ffffff !important;
+}
+
+/* HEADINGS & TYPOGRAPHY */
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
+    font-family: 'Prompt', sans-serif !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+}
+
+/* BUTTONS */
+.btn-primary, .login-btn {
+    background: linear-gradient(135deg, #084b96 0%, #0f5ed7 100%) !important;
+    border: none !important;
+    box-shadow: 0 2px 4px rgba(8, 75, 150, 0.25) !important;
+    font-family: 'Prompt', sans-serif !important;
+}
+
+.btn-primary:hover, .login-btn:hover {
+    background: linear-gradient(135deg, #063c78 0%, #084b96 100%) !important;
+    box-shadow: 0 4px 8px rgba(8, 75, 150, 0.35) !important;
+}
+
+/* COMPACT ERP TABLES */
+.content-card, .card-table-wrap {
+    background: #ffffff !important;
+    border: 1px solid var(--erp-border-color) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    overflow: hidden !important;
+}
+
+.table {
+    font-size: 0.8125rem !important;
+    color: #1e293b !important;
+    margin-bottom: 0 !important;
+}
+
+.table > :not(caption) > * > * {
+    padding: 6px 10px !important;
+    vertical-align: middle !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    border-right: 1px solid #f1f5f9 !important;
+}
+
+.table thead th {
+    background: linear-gradient(180deg, #094f9b 0%, #063c78 100%) !important;
+    color: #ffffff !important;
+    font-family: 'Prompt', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 0.80rem !important;
+    white-space: nowrap !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-bottom: none !important;
+    text-align: left !important;
+}
+
+.table thead th a {
+    color: #ffffff !important;
+    text-decoration: none !important;
+}
+
+.table thead th a:hover {
+    color: var(--erp-blue-accent) !important;
+}
+
+.table tbody tr:nth-of-type(even) {
+    background-color: #f8fafc !important;
+}
+
+.table tbody tr:hover {
+    background-color: #edf4fc !important;
+}
+
+/* KPI METRIC CARDS */
+.metric-card-blue { border-left: 4px solid #0284c7 !important; }
+.metric-card-green { border-left: 4px solid #10b981 !important; }
+.metric-card-orange { border-left: 4px solid #f59e0b !important; }
+.metric-card-red { border-left: 4px solid #ef4444 !important; }
+
+/* BADGES */
+.badge {
+    font-family: 'Prompt', sans-serif !important;
+    font-weight: 500 !important;
+    font-size: 0.75rem !important;
+    padding: 4px 8px !important;
+}
+
