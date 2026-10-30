@@ -14,7 +14,8 @@ use yii\helpers\ArrayHelper;
 use yii\helpers\Url;
 
 $this->title = 'ลงทะเบียนเข้าใช้งาน e-Office';
-$this->registerCssFile('@web/css/eoffice.css', ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
+$ver = time();
+$this->registerCssFile("@web/css/eoffice.css?v={$ver}", ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
 $this->registerCssFile('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css');
 
 $deptOptions = ArrayHelper::map($departments, 'id', 'name');

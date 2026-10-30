@@ -39,6 +39,9 @@ return [
         'errorHandler' => [
             'errorAction' => 'site/error',
         ],
+        'assetManager' => [
+            'appendTimestamp' => true,
+        ],
         /*
         'urlManager' => [
             'enablePrettyUrl' => true,

@@ -11,7 +11,8 @@ use yii\bootstrap5\Html;
 use yii\helpers\Url;
 
 $this->title = 'เข้าสู่ระบบ e-Office';
-$this->registerCssFile('@web/css/eoffice.css', ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
+$ver = time();
+$this->registerCssFile("@web/css/eoffice.css?v={$ver}", ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
 $this->registerCssFile('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css');
 
 $htmlIcon = <<<HTML
