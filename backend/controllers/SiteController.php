@@ -33,7 +33,7 @@ class SiteController extends Controller
                 'class' => AccessControl::class,
                 'rules' => [
                     [
-                        'actions' => ['index', 'login', 'error', 'signup', 'check-line-login', 'get-line-session', 'line-auth', 'line-callback'],
+                        'actions' => ['index', 'login', 'error', 'signup', 'pending-approval', 'check-line-login', 'get-line-session', 'line-auth', 'line-callback'],
                         'allow' => true,
                     ],
                     [
@@ -177,9 +177,22 @@ class SiteController extends Controller
         $this->layout = 'blank';
         $model = new SignupForm();
 
+        // ตรวจสอบว่ามีข้อมูล LINE จาก Session หรือไม่ (หลังจากกดเชื่อม LINE)
+        $lineData = Yii::$app->session->get('signup_line_data');
+        if (!empty($lineData['line_user_id'])) {
+            $model->line_user_id = $lineData['line_user_id'];
+            $model->line_display_name = $lineData['line_display_name'] ?? '';
+            if (empty($model->fullname)) {
+                $model->fullname = $model->line_display_name;
+            }
+        }
+
         if ($model->load(Yii::$app->request->post())) {
             $user = $model->signup();
             if ($user !== null) {
+                // ล้าง session LINE ชั่วคราว
+                Yii::$app->session->remove('signup_line_data');
+
                 // แจ้งเตือนแอดมินทาง LINE ทันที
                 try {
                     $lineService = new LineMessagingService();
@@ -188,8 +201,16 @@ class SiteController extends Controller
                     Yii::error('Failed to notify admin via LINE: ' . $e->getMessage(), __METHOD__);
                 }
 
-                Yii::$app->session->setFlash('success', 'ลงทะเบียนสำเร็จ! บัญชีของคุณอยู่ระหว่างรอผู้ดูแลระบบตรวจสอบและอนุมัติการใช้งาน');
-                return $this->redirect(['login']);
+                // ส่งข้อความยืนยันการลงทะเบียนเข้าแชท LINE ของครูทันที
+                try {
+                    $lineService = new LineMessagingService();
+                    $deptName = $user->department?->name ?? 'ทั่วไป';
+                    $lineService->pushText($user->line_user_id, "📋 ลงทะเบียนเข้าใช้งาน e-Office สำเร็จ\n\nสวัสดีครับคุณครู " . $user->displayName() . "\nสังกัด: " . $deptName . "\n\nขณะนี้ข้อมูลของคุณครูอยู่ระหว่างรอ 'ผู้ดูแลระบบ (Admin) ตรวจสอบและอนุมัติ'\nเมื่อได้รับการอนุมัติแล้ว ระบบจะส่งข้อความแจ้งเตือนมาทาง LINE นี้ทันทีครับ");
+                } catch (\Throwable $e) {
+                    Yii::error('Failed to notify teacher welcome on signup: ' . $e->getMessage(), __METHOD__);
+                }
+
+                return $this->redirect(['pending-approval', 'id' => $user->id]);
             }
         }
 
@@ -201,6 +222,23 @@ class SiteController extends Controller
         return $this->render('signup', [
             'model' => $model,
             'departments' => $departments,
+            'lineData' => $lineData,
+        ]);
+    }
+
+    /**
+     * หน้ารายงานสถานะรออนุมัติ (Pending Approval)
+     */
+    public function actionPendingApproval(?int $id = null): string|Response
+    {
+        $this->layout = 'blank';
+        $user = null;
+        if ($id !== null) {
+            $user = User::findOne($id);
+        }
+
+        return $this->render('pending-approval', [
+            'user' => $user,
         ]);
     }
 
@@ -281,8 +319,7 @@ class SiteController extends Controller
 
         if ($user instanceof User) {
             if ($user->status === User::STATUS_INACTIVE) {
-                Yii::$app->session->setFlash('warning', 'บัญชีของท่าน (' . $user->displayName() . ') อยู่ระหว่างรอผู้ดูแลระบบอนุมัติการใช้งาน');
-                return $this->redirect(['login']);
+                return $this->redirect(['pending-approval', 'id' => $user->id]);
             }
             if ($user->status === User::STATUS_DELETED) {
                 Yii::$app->session->setFlash('error', 'บัญชีนี้ถูกปิดการใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
@@ -298,37 +335,15 @@ class SiteController extends Controller
             return $this->redirect(['/document/my']);
         }
 
-        // 4. กรณีเพิ่งเข้าสู่ระบบด้วย LINE ครั้งแรก และยังไม่เคยผูกบัญชี
-        // สร้างบัญชีผู้ใช้ใหม่ให้อัตโนมัติในสถานะรออนุมัติ
-        $newUser = new User();
-        $safeUsername = 'line_' . substr($lineUserId, -8);
-        $newUser->username = $safeUsername;
-        $newUser->fullname = $displayName;
-        $newUser->email = 'line_' . substr($lineUserId, -10) . '@kudchum.local';
-        $newUser->role = User::ROLE_GENERAL_USER;
-        $newUser->status = User::STATUS_INACTIVE; // รอแอดมินอนุมัติ
-        $newUser->line_user_id = $lineUserId;
-        $newUser->line_display_name = $displayName;
-        $newUser->line_linked_at = time();
-        $newUser->setPassword(Yii::$app->security->generateRandomString(12));
-        $newUser->generateAuthKey();
-        $newUser->verification_token = Yii::$app->security->generateRandomString();
+        // 4. กรณีบัญชี LINE นี้ยังไม่เคยมีในระบบ:
+        // เก็บข้อมูล LINE ลง Session แล้วส่งครูไปยังหน้าลงทะเบียน พร้อมระบุ LINE อัตโนมัติ
+        Yii::$app->session->set('signup_line_data', [
+            'line_user_id' => $lineUserId,
+            'line_display_name' => $displayName,
+        ]);
 
-        if ($newUser->save(false)) {
-            // แจ้งเตือนแอดมินทาง LINE ทันที
-            try {
-                $lineService = new LineMessagingService();
-                $lineService->notifyAdminNewTeacherSignup($newUser);
-            } catch (\Throwable $e) {
-                Yii::error('Failed to notify admin on LINE login: ' . $e->getMessage(), __METHOD__);
-            }
-
-            Yii::$app->session->setFlash('info', 'เข้าสู่ระบบด้วย LINE สำเร็จเป็นครั้งแรก! บัญชีของคุณ (' . $displayName . ') ถูกสร้างเรียบร้อยแล้วและอยู่ระหว่างรอผู้ดูแลระบบอนุมัติการใช้งาน');
-            return $this->redirect(['login']);
-        }
-
-        Yii::$app->session->setFlash('error', 'เกิดข้อผิดพลาดในการลงทะเบียนบัญชี LINE');
-        return $this->redirect(['login']);
+        Yii::$app->session->setFlash('success', 'เชื่อมต่อ LINE สำเร็จ! กรุณากรอกข้อมูลส่วนตัวเพื่อลงทะเบียนเข้าใช้งาน');
+        return $this->redirect(['signup']);
     }
 
     private function exchangeLineToken(string $code, string $channelId, string $channelSecret, string $redirectUri): ?array
