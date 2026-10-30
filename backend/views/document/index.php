@@ -51,34 +51,24 @@ $thaiDate = static function (?string $date): string {
 ?>
 
 <div class="eoffice-page">
-    <div class="eoffice-titlebar">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 pb-2 border-bottom">
         <div>
-            <h1><?= Html::encode($this->title) ?></h1>
-            <p>ทะเบียนหนังสือรับจาก SMSS และสถานะการเสนอ</p>
+            <h1 class="h5 fw-bold text-dark mb-0"><?= Html::encode($this->title) ?></h1>
+            <div class="small text-muted">ทะเบียนหนังสือรับจาก SMSS และสถานะการเสนอ</div>
         </div>
         <?php if ($canCreateDocument): ?>
-            <?= Html::a('<i class="bi bi-plus-circle" aria-hidden="true"></i><span>ลงทะเบียนหนังสือรับ</span>', ['create'], ['class' => 'btn btn-primary']) ?>
+            <?= Html::a('<i class="bi bi-plus-circle me-1" aria-hidden="true"></i><span>ลงทะเบียนหนังสือรับ</span>', ['create'], ['class' => 'btn btn-sm btn-primary fw-semibold']) ?>
         <?php endif; ?>
     </div>
 
-    <div class="metric-grid">
-        <div class="metric-card">
-            <i class="metric-icon bi bi-inbox" aria-hidden="true"></i>
-            <span>รับใหม่</span>
-            <strong><?= Html::encode((string) $dataProvider->getTotalCount()) ?></strong>
-            <small>รายการทั้งหมดในระบบ</small>
-        </div>
-        <div class="metric-card warning">
-            <i class="metric-icon bi bi-hourglass-split" aria-hidden="true"></i>
-            <span>รอสั่งการ</span>
-            <strong>0</strong>
-            <small>รอผู้บริหาร</small>
-        </div>
-        <div class="metric-card danger">
-            <i class="metric-icon bi bi-exclamation-triangle" aria-hidden="true"></i>
-            <span>ด่วน</span>
-            <strong>0</strong>
-            <small>ต้องติดตาม</small>
+    <!-- สรุปสถานะเป็น BADGE กะทัดรัด -->
+    <div class="p-2 bg-white rounded-3 border shadow-sm mb-3">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 py-2 px-3 d-inline-flex align-items-center gap-2">
+                <i class="bi bi-inbox-fill"></i>
+                <span>รับทั้งหมด:</span>
+                <strong class="fs-6 font-monospace"><?= Html::encode((string) $dataProvider->getTotalCount()) ?></strong>
+            </span>
         </div>
     </div>
 

@@ -29,14 +29,14 @@ $thaiDate = static function (?string $date): string {
 ?>
 
 <div class="eoffice-page">
-    <div class="eoffice-titlebar">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 pb-2 border-bottom">
         <div>
-            <h1><?= Html::encode($this->title) ?></h1>
-            <p>บันทึกข้อความภายในและสถานะการเสนอ</p>
+            <h1 class="h5 fw-bold text-dark mb-0"><?= Html::encode($this->title) ?></h1>
+            <div class="small text-muted">บันทึกข้อความภายในและสถานะการเสนอ</div>
         </div>
-        <div class="pdf-toolbar-actions">
-            <?= Html::a('<i class="bi bi-list-check" aria-hidden="true"></i><span>งานบันทึกของฉัน</span>', ['my'], ['class' => 'btn btn-outline-secondary']) ?>
-            <?= Html::a('<i class="bi bi-plus-circle" aria-hidden="true"></i><span>สร้างบันทึกเสนอ</span>', ['create'], ['class' => 'btn btn-primary']) ?>
+        <div class="d-flex gap-1 flex-wrap">
+            <?= Html::a('<i class="bi bi-list-check me-1" aria-hidden="true"></i><span>งานบันทึกของฉัน</span>', ['my'], ['class' => 'btn btn-sm btn-outline-secondary']) ?>
+            <?= Html::a('<i class="bi bi-plus-circle me-1" aria-hidden="true"></i><span>สร้างบันทึกเสนอ</span>', ['create'], ['class' => 'btn btn-sm btn-primary fw-semibold']) ?>
         </div>
     </div>
 

@@ -65,55 +65,42 @@ $thaiDate = static function (?string $date): string {
 ?>
 
 <div class="eoffice-page">
-    <div class="eoffice-titlebar">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 pb-2 border-bottom">
         <div>
-            <h1><?= Html::encode($this->title) ?></h1>
-            <p><?= Html::encode($roleLabel) ?> - โต๊ะทำงานรวมสำหรับเอกสารที่รอดำเนินการ</p>
+            <h1 class="h5 fw-bold text-dark mb-0"><?= Html::encode($this->title) ?></h1>
+            <div class="small text-muted"><?= Html::encode($roleLabel) ?> - เอกสารที่รอดำเนินการ</div>
         </div>
-        <div class="pdf-toolbar-actions">
-            <?= Html::a('<i class="bi bi-inbox" aria-hidden="true"></i><span>หนังสือรับทั้งหมด</span>', ['index'], ['class' => 'btn btn-outline-secondary']) ?>
+        <div class="d-flex gap-1 flex-wrap">
+            <?= Html::a('<i class="bi bi-inbox me-1" aria-hidden="true"></i><span>หนังสือรับทั้งหมด</span>', ['index'], ['class' => 'btn btn-sm btn-outline-secondary']) ?>
             <?php if ($showMemoWorkbench): ?>
-                <?= Html::a('<i class="bi bi-journal-text" aria-hidden="true"></i><span>บันทึกเสนอทั้งหมด</span>', ['/memo/index'], ['class' => 'btn btn-outline-secondary']) ?>
+                <?= Html::a('<i class="bi bi-journal-text me-1" aria-hidden="true"></i><span>บันทึกเสนอทั้งหมด</span>', ['/memo/index'], ['class' => 'btn btn-sm btn-outline-secondary']) ?>
             <?php endif; ?>
         </div>
     </div>
 
-    <div class="metric-grid">
-        <div class="metric-card">
-            <i class="metric-icon bi bi-list-check" aria-hidden="true"></i>
-            <span>รอดำเนินการ</span>
-            <strong><?= Html::encode((string) $allTotal) ?></strong>
-            <small>รวมงานบนโต๊ะของคุณ</small>
+    <!-- แถบสรุปสถานะแบบ BADGE แนวนอน (Mobile-First แทน Card ใหญ่) -->
+    <div class="p-2 bg-white rounded-3 border shadow-sm mb-3">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 py-2 px-3 d-inline-flex align-items-center gap-2">
+                <i class="bi bi-list-check"></i>
+                <span>รอดำเนินการทั้งหมด:</span>
+                <strong class="fs-6 font-monospace"><?= Html::encode((string) $allTotal) ?></strong>
+            </span>
+
+            <span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-50 py-2 px-3 d-inline-flex align-items-center gap-2">
+                <i class="bi bi-inbox-fill text-warning"></i>
+                <span>หนังสือรับ:</span>
+                <strong class="fs-6 font-monospace"><?= Html::encode((string) $documentTotal) ?></strong>
+            </span>
+
+            <?php if ($showMemoWorkbench): ?>
+                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-2 px-3 d-inline-flex align-items-center gap-2">
+                    <i class="bi bi-journal-text"></i>
+                    <span>บันทึกข้อความ:</span>
+                    <strong class="fs-6 font-monospace"><?= Html::encode((string) $memoTotal) ?></strong>
+                </span>
+            <?php endif; ?>
         </div>
-        <div class="metric-card warning">
-            <i class="metric-icon bi bi-inbox" aria-hidden="true"></i>
-            <span>หนังสือรับ</span>
-            <strong><?= Html::encode((string) $documentTotal) ?></strong>
-            <small>รายการ</small>
-        </div>
-        <?php if ($showMemoWorkbench): ?>
-            <div class="metric-card">
-                <i class="metric-icon bi bi-journal-text" aria-hidden="true"></i>
-                <span>บันทึกข้อความ</span>
-                <strong><?= Html::encode((string) $memoTotal) ?></strong>
-                <small>รายการ</small>
-            </div>
-        <?php elseif (count($statuses) < 2): ?>
-            <div class="metric-card warning">
-                <i class="metric-icon bi bi-folder2-open" aria-hidden="true"></i>
-                <span>สถานะอื่น</span>
-                <strong>0</strong>
-                <small>ไม่มีในคิวบทบาทนี้</small>
-            </div>
-        <?php else: ?>
-            <?php $status = $statuses[0]; ?>
-            <div class="metric-card <?= $status === Document::STATUS_RETURNED ? 'danger' : 'warning' ?>">
-                <i class="metric-icon bi <?= $status === Document::STATUS_RETURNED ? 'bi-arrow-counterclockwise' : 'bi-clock-history' ?>" aria-hidden="true"></i>
-                <span><?= Html::encode($statusOptions[$status] ?? $status) ?></span>
-                <strong><?= Html::encode((string) ($summary[$status] ?? 0)) ?></strong>
-                <small>รายการ</small>
-            </div>
-        <?php endif; ?>
     </div>
 
     <?php if ($showMemoWorkbench): ?>

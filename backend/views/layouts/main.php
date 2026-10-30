@@ -26,11 +26,6 @@ $this->render('_head');
 
 <main id="main" class="flex-grow-1 eoffice-main" role="main">
     <div class="container eoffice-container">
-        <?php if (!empty($this->params['breadcrumbs'])): ?>
-            <div class="eoffice-breadcrumbs">
-                <?= Breadcrumbs::widget(['links' => $this->params['breadcrumbs']]) ?>
-            </div>
-        <?php endif ?>
         <?= Alert::widget() ?>
         <?= $content ?>
     </div>

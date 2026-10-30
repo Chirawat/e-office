@@ -7,8 +7,11 @@ namespace backend\controllers;
 use backend\models\SignupForm;
 use common\components\LineMessagingService;
 use common\models\Department;
+use common\models\Document;
+use common\models\DocumentAssignment;
 use common\models\LineLoginSession;
 use common\models\LoginForm;
+use common\models\Memo;
 use common\models\User;
 use Yii;
 use yii\filters\AccessControl;
@@ -65,13 +68,73 @@ class SiteController extends Controller
     }
 
     /**
-     * Displays homepage.
+     * Displays homepage: Landing Page สำหรับ Guest, Internal Dashboard สำหรับผู้ใช้ที่ล็อกอินแล้ว
      *
      * @return string
      */
     public function actionIndex(): string
     {
-        return $this->render('index');
+        // 1. ถ้ายังไม่ได้ล็อกอิน ให้แสดงหน้า Landing Page (แนะนำระบบ / ประชาสัมพันธ์)
+        if (Yii::$app->user->isGuest) {
+            return $this->render('index');
+        }
+
+        /** @var User $identity */
+        $identity = Yii::$app->user->identity;
+
+        // 2. ดึงสถิติต่างๆ สำหรับ Internal Dashboard
+        $stats = [
+            'pending_users' => 0,
+            'total_users' => 0,
+            'month_docs' => 0,
+            'pending_deputy_docs' => 0,
+            'pending_director_docs' => 0,
+            'my_pending_tasks' => 0,
+            'my_memos_count' => 0,
+        ];
+
+        // สถิติสำหรับ Admin
+        if ($identity->hasRole(User::ROLE_ADMIN)) {
+            $stats['pending_users'] = (int) User::find()->where(['status' => User::STATUS_INACTIVE])->count();
+            $stats['total_users'] = (int) User::find()->where(['status' => User::STATUS_ACTIVE])->count();
+        }
+
+        // สถิติเอกสารเดือนนี้
+        $firstDayOfMonth = strtotime(date('Y-m-01 00:00:00'));
+        $stats['month_docs'] = (int) Document::find()->where(['>=', 'created_at', $firstDayOfMonth])->count();
+
+        // สถิติสำหรับผู้บริหาร
+        $stats['pending_deputy_docs'] = (int) Document::find()->where(['status' => Document::STATUS_SUBMITTED_TO_DEPUTY])->count();
+        $stats['pending_director_docs'] = (int) Document::find()->where(['status' => Document::STATUS_SUBMITTED_TO_DIRECTOR])->count();
+
+        // สถิติส่วนตัวของครู/บุคลากร
+        $stats['my_pending_tasks'] = (int) DocumentAssignment::find()
+            ->where(['assigned_to' => $identity->id, 'status' => 'pending'])
+            ->count();
+        $stats['my_memos_count'] = (int) Memo::find()
+            ->where(['created_by' => $identity->id])
+            ->count();
+
+        // ดึงเอกสารสำคัญล่าสุด 5 รายการ
+        $recentDocs = Document::find()
+            ->with(['department'])
+            ->orderBy(['id' => SORT_DESC])
+            ->limit(6)
+            ->all();
+
+        // ดึงบันทึกข้อความล่าสุด 5 รายการ
+        $recentMemos = Memo::find()
+            ->with(['department', 'creator'])
+            ->orderBy(['id' => SORT_DESC])
+            ->limit(5)
+            ->all();
+
+        return $this->render('dashboard', [
+            'identity' => $identity,
+            'stats' => $stats,
+            'recentDocs' => $recentDocs,
+            'recentMemos' => $recentMemos,
+        ]);
     }
 
     /**

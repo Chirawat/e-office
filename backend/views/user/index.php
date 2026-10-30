@@ -21,12 +21,12 @@ $currentUserId = (int) Yii::$app->user->id;
 ?>
 
 <div class="eoffice-page">
-    <div class="eoffice-titlebar">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 pb-2 border-bottom">
         <div>
-            <h1><?= Html::encode($this->title) ?></h1>
-            <p>กำหนดสิทธิ์ผู้ใช้ อนุมัติสมาชิกใหม่ และดูแลการเข้าสู่ระบบ</p>
+            <h1 class="h5 fw-bold text-dark mb-0"><?= Html::encode($this->title) ?></h1>
+            <div class="small text-muted">กำหนดสิทธิ์ผู้ใช้ อนุมัติสมาชิกใหม่ และดูแลการเข้าสู่ระบบ</div>
         </div>
-        <?= Html::a('<i class="bi bi-person-plus" aria-hidden="true"></i><span>สร้างผู้ใช้ใหม่</span>', ['create'], ['class' => 'btn btn-primary']) ?>
+        <?= Html::a('<i class="bi bi-person-plus me-1" aria-hidden="true"></i><span>สร้างผู้ใช้ใหม่</span>', ['create'], ['class' => 'btn btn-sm btn-primary fw-semibold']) ?>
     </div>
 
     <!-- แถบกรองสถานะผู้ใช้งาน -->

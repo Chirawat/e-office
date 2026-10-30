@@ -11,73 +11,144 @@ use yii\helpers\Html;
 
 $identity = Yii::$app->user->identity;
 $roleLabel = $identity instanceof User ? $identity->roleLabel() : '';
+$userName = $identity instanceof User ? $identity->displayName() : '';
 $isAdmin = $identity instanceof User && $identity->hasRole(User::ROLE_ADMIN);
-$mainItems = [
+$isOfficer = $identity instanceof User && ($identity->hasRole(User::ROLE_OFFICER) || $isAdmin);
+
+$mainItems = [];
+
+// 1. หน้าหลัก
+$mainItems[] = [
+    'label' => '<i class="bi bi-speedometer2 me-1" aria-hidden="true"></i><span>โต๊ะทำงาน (งานของฉัน)</span>',
+    'url' => ['/document/my'],
+    'visible' => !Yii::$app->user->isGuest,
+];
+
+// 2. หมวดหนังสือรับ (Document Group)
+$docItems = [
     [
-        'label' => '<i class="bi bi-house-door" aria-hidden="true"></i><span>หน้าหลัก</span>',
-        'url' => ['/site/index'],
-    ],
-    [
-        'label' => '<i class="bi bi-inbox" aria-hidden="true"></i><span>หนังสือรับ</span>',
+        'label' => '<i class="bi bi-inbox me-2 text-primary" aria-hidden="true"></i><span>ทะเบียนหนังสือรับทั้งหมด</span>',
         'url' => ['/document/index'],
-        'visible' => !Yii::$app->user->isGuest,
     ],
+];
+if ($isOfficer) {
+    $docItems[] = '-'; // เส้นคั่น divider
+    $docItems[] = [
+        'label' => '<i class="bi bi-plus-circle me-2 text-success" aria-hidden="true"></i><span>ลงรับหนังสือใหม่</span>',
+        'url' => ['/document/create'],
+    ];
+}
+$mainItems[] = [
+    'label' => '<i class="bi bi-folder2-open me-1" aria-hidden="true"></i><span>งานหนังสือรับ</span>',
+    'items' => $docItems,
+    'visible' => !Yii::$app->user->isGuest,
+];
+
+// 3. หมวดบันทึกข้อความ (Memo Group)
+$memoItems = [
     [
-        'label' => '<i class="bi bi-journal-text" aria-hidden="true"></i><span>บันทึกเสนอ</span>',
+        'label' => '<i class="bi bi-journal-text me-2 text-primary" aria-hidden="true"></i><span>รายการบันทึกเสนอทั้งหมด</span>',
         'url' => ['/memo/index'],
-        'visible' => !Yii::$app->user->isGuest,
     ],
     [
-        'label' => '<i class="bi bi-list-check" aria-hidden="true"></i><span>งานของฉัน</span>',
-        'url' => ['/document/my'],
-        'visible' => !Yii::$app->user->isGuest,
+        'label' => '<i class="bi bi-person-lines-fill me-2 text-info" aria-hidden="true"></i><span>บันทึกข้อความของฉัน</span>',
+        'url' => ['/memo/my'],
     ],
+    '-',
     [
-        'label' => '<i class="bi bi-chat-dots" aria-hidden="true"></i><span>เชื่อมต่อ LINE</span>',
-        'url' => ['/line/link'],
-        'visible' => !Yii::$app->user->isGuest,
-    ],
-    [
-        'label' => '<i class="bi bi-people" aria-hidden="true"></i><span>ผู้ใช้</span>',
-        'url' => ['/user/index'],
-        'visible' => $isAdmin,
+        'label' => '<i class="bi bi-file-earmark-plus me-2 text-success" aria-hidden="true"></i><span>สร้างบันทึกเสนอใหม่</span>',
+        'url' => ['/memo/create'],
     ],
 ];
-$rightItems = [
-    [
-        'label' => '<i class="bi bi-box-arrow-in-right" aria-hidden="true"></i><span>Login</span>',
-        'url' => ['/site/login'],
-        'visible' => Yii::$app->user->isGuest,
-    ],
-    [
-        'label' => '<i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Logout (' . Html::encode(Yii::$app->user->identity?->username) . ($roleLabel !== '' ? ' - ' . Html::encode($roleLabel) : '') . ')</span>',
-        'url' => ['/site/logout'],
-        'linkOptions' => [
-            'data-method' => 'post',
-            'class' => 'logout',
+$mainItems[] = [
+    'label' => '<i class="bi bi-pencil-square me-1" aria-hidden="true"></i><span>บันทึกข้อความ (e-Memo)</span>',
+    'items' => $memoItems,
+    'visible' => !Yii::$app->user->isGuest,
+];
+
+// 4. หมวดจัดการระบบ (สำหรับ Admin)
+if ($isAdmin) {
+    $adminItems = [
+        [
+            'label' => '<i class="bi bi-people me-2 text-primary" aria-hidden="true"></i><span>จัดการผู้ใช้และบทบาท</span>',
+            'url' => ['/user/index'],
         ],
-        'visible' => !Yii::$app->user->isGuest,
-    ],
-];
+        [
+            'label' => '<i class="bi bi-person-plus me-2 text-success" aria-hidden="true"></i><span>สร้างผู้ใช้ใหม่</span>',
+            'url' => ['/user/create'],
+        ],
+        '-',
+        [
+            'label' => '<i class="bi bi-chat-dots me-2 text-success" aria-hidden="true"></i><span>ตั้งค่า LINE OA & Token</span>',
+            'url' => ['/line/link'],
+        ],
+    ];
+    $mainItems[] = [
+        'label' => '<i class="bi bi-gear me-1" aria-hidden="true"></i><span>จัดการระบบ</span>',
+        'items' => $adminItems,
+    ];
+}
+
+// ฝั่งขวา: โปรไฟล์ผู้ใช้ และการตั้งค่าส่วนตัว
+$rightItems = [];
+
+if (Yii::$app->user->isGuest) {
+    $rightItems[] = [
+        'label' => '<i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i><span>เข้าสู่ระบบ</span>',
+        'url' => ['/site/login'],
+    ];
+    $rightItems[] = [
+        'label' => '<i class="bi bi-person-plus me-1" aria-hidden="true"></i><span>สมัครสมาชิก</span>',
+        'url' => ['/site/signup'],
+    ];
+} else {
+    // Dropdown ข้อมูลผู้ใช้
+    $userMenuItems = [
+        [
+            'label' => '<div class="px-2 py-1"><div class="fw-bold text-dark">' . Html::encode($userName) . '</div><div class="small text-muted">' . Html::encode($roleLabel) . '</div></div>',
+            'encode' => false,
+            'options' => ['class' => 'bg-light border-bottom'],
+        ],
+        [
+            'label' => '<i class="bi bi-chat-dots me-2 text-success" aria-hidden="true"></i><span>เชื่อมต่อ LINE ของฉัน</span>',
+            'url' => ['/line/link'],
+        ],
+        '-',
+        [
+            'label' => '<i class="bi bi-box-arrow-right me-2 text-danger" aria-hidden="true"></i><span>ออกจากระบบ</span>',
+            'url' => ['/site/logout'],
+            'linkOptions' => [
+                'data-method' => 'post',
+                'class' => 'text-danger fw-semibold',
+            ],
+        ],
+    ];
+
+    $rightItems[] = [
+        'label' => '<div class="d-inline-flex align-items-center gap-2"><span class="badge rounded-circle bg-white text-primary p-1" style="width: 24px; height: 24px; display: inline-grid; place-items: center;"><i class="bi bi-person-fill"></i></span><span>' . Html::encode($userName) . '</span><span class="badge bg-white bg-opacity-20 text-white ms-1 fw-normal">' . Html::encode($roleLabel) . '</span></div>',
+        'items' => $userMenuItems,
+        'encode' => false,
+    ];
+}
 ?>
 <header id="header">
     <?php NavBar::begin(
         [
-            'brandLabel' => Yii::$app->name,
-            'brandUrl' => Yii::$app->homeUrl,
-            'options' => ['class' => 'navbar navbar-expand-md navbar-dark fixed-top eoffice-navbar']
+            'brandLabel' => '<div class="d-inline-flex align-items-center gap-2"><span class="brand-badge-icon shadow-sm"><i class="bi bi-building-check text-primary"></i></span><span class="fw-bold tracking-wide">e-Office</span></div>',
+            'brandUrl' => Yii::$app->user->isGuest ? ['/site/index'] : ['/document/my'],
+            'options' => ['class' => 'navbar navbar-expand-lg navbar-dark fixed-top eoffice-navbar']
         ],
     ) ?>
     <?= Nav::widget(
         [
-            'options' => ['class' => 'navbar-nav me-auto'],
+            'options' => ['class' => 'navbar-nav me-auto align-items-lg-center'],
             'encodeLabels' => false,
             'items' => $mainItems,
         ],
     ) ?>
     <?= Nav::widget(
         [
-            'options' => ['class' => 'navbar-nav ms-auto'],
+            'options' => ['class' => 'navbar-nav ms-auto align-items-lg-center'],
             'encodeLabels' => false,
             'items' => $rightItems,
         ],
