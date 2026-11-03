@@ -61,11 +61,10 @@ class DocumentController extends Controller
             ->with(['department', 'originalFile'])
             ->orderBy(['{{%document}}.[[id]]' => SORT_DESC]);
         $keyword = trim((string) Yii::$app->request->get('q', ''));
-        $scope = (string) Yii::$app->request->get('scope', 'all');
+        $departmentId = Yii::$app->request->get('department_id');
+        $departmentId = ($departmentId !== null && $departmentId !== '') ? (int) $departmentId : null;
         $identity = Yii::$app->user->identity;
 
-        $countAll = 0;
-        $countMy = 0;
         $myAssignedDocIds = [];
 
         if ($identity instanceof User) {
@@ -73,49 +72,70 @@ class DocumentController extends Controller
             $myIdsQuery = Document::find()->select('{{%document}}.[[id]]');
             $this->applyStaffAssignmentScope($myIdsQuery, $identity);
             $myAssignedDocIds = array_map('intval', $myIdsQuery->column());
-
-            if ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
-                // คำนวณจำนวนหนังสือภายนอกทั้งหมดที่เผยแพร่แล้ว (ไม่รวมชั้นความลับ)
-                $countAll = (int) Document::find()
-                    ->where(['{{%document}}.[[status]]' => [Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]])
-                    ->andWhere(['{{%document}}.[[confidentiality]]' => 'normal'])
-                    ->count();
-
-                // คำนวณจำนวนหนังสือที่มอบหมายถึงตนเอง
-                $countMy = count($myAssignedDocIds);
-            }
         }
+
+        // รายการกลุ่มงานทั้งหมดที่เปิดใช้งาน
+        $departments = Department::find()
+            ->where(['is_active' => true])
+            ->orderBy(['sort_order' => SORT_ASC, 'id' => SORT_ASC])
+            ->all();
+
+        // ฐานการนับจำนวนหนังสือสำหรับแต่ละแท็บ
+        $countQuery = Document::find();
 
         if ($identity instanceof User && !$identity->hasRole(User::ROLE_ADMIN)) {
             if ($identity->hasRole(User::ROLE_DEPUTY_DIRECTOR)) {
                 $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DEPUTY, Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_RETURNED]]);
+                $countQuery->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DEPUTY, Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_RETURNED]]);
                 $isActing = SystemSetting::isActingDirector() && (int) $identity->id === SystemSetting::getActingDirectorUserId();
                 if (!$isActing && $identity->role === User::ROLE_DEPUTY_DIRECTOR) {
                     $myDepts = $identity->departmentIds();
                     if ($myDepts !== []) {
                         $query->andWhere(['{{%document}}.[[department_id]]' => $myDepts]);
+                        $countQuery->andWhere(['{{%document}}.[[department_id]]' => $myDepts]);
                     }
                 }
             } elseif ($identity->hasRole(User::ROLE_DIRECTOR)) {
                 $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
+                $countQuery->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
             } elseif ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
                 $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
-                if ($scope === 'my') {
-                    $this->applyStaffAssignmentScope($query, $identity);
-                } else {
-                    // โหมดดูทั้งหมด: ซ่อนเอกสารชั้นความลับ
-                    $query->andWhere(['{{%document}}.[[confidentiality]]' => 'normal']);
-                }
+                $query->andWhere(['{{%document}}.[[confidentiality]]' => 'normal']);
+                $countQuery->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
+                $countQuery->andWhere(['{{%document}}.[[confidentiality]]' => 'normal']);
             }
         }
 
+        // คัดกรองตามกลุ่มงานหากมีการเลือกแท็บ
+        if ($departmentId !== null) {
+            $query->andWhere(['{{%document}}.[[department_id]]' => $departmentId]);
+        }
+
         if ($keyword !== '') {
-            $query->andWhere([
+            $searchCond = [
                 'or',
                 ['like', '{{%document}}.[[subject]]', $keyword],
                 ['like', '{{%document}}.[[external_no]]', $keyword],
                 ['like', '{{%document}}.[[receive_no]]', $keyword],
-            ]);
+            ];
+            $query->andWhere($searchCond);
+            $countQuery->andWhere($searchCond);
+        }
+
+        // คำนวณจำนวนหนังสือรวมทั้งหมด
+        $countAll = (int) (clone $countQuery)->count();
+
+        // คำนวณจำนวนหนังสือของแต่ละกลุ่มงาน
+        $deptCounts = [];
+        $deptCountRows = (clone $countQuery)
+            ->select(['department_id', 'COUNT(*) AS cnt'])
+            ->groupBy('department_id')
+            ->asArray()
+            ->all();
+        foreach ($deptCountRows as $row) {
+            if ($row['department_id'] !== null) {
+                $deptCounts[(int) $row['department_id']] = (int) $row['cnt'];
+            }
         }
 
         $dataProvider = new ActiveDataProvider([
@@ -126,9 +146,10 @@ class DocumentController extends Controller
         return $this->render('index', [
             'dataProvider' => $dataProvider,
             'keyword' => $keyword,
-            'scope' => $scope,
+            'departmentId' => $departmentId,
+            'departments' => $departments,
             'countAll' => $countAll,
-            'countMy' => $countMy,
+            'deptCounts' => $deptCounts,
             'myAssignedDocIds' => $myAssignedDocIds,
         ]);
     }

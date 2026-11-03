@@ -254,7 +254,7 @@ $memoStatusBadge = static function (Memo $model): string {
                         <div class="list-group list-group-flush">
                             <?php foreach ($docModels as $doc): ?>
                                 <?php
-                                $viewUrl = Url::to(['view', 'id' => $doc->id]);
+                                $viewUrl = Url::to(['/document/view', 'id' => $doc->id]);
                                 $senderText = trim((string) $doc->sender) ?: 'หนังสือเข้า';
                                 $initial = $getInitial($senderText);
                                 $isUrgent = in_array($doc->urgency, [Document::URGENCY_URGENT, Document::URGENCY_VERY_URGENT, Document::URGENCY_MOST_URGENT], true);
@@ -338,7 +338,7 @@ $memoStatusBadge = static function (Memo $model): string {
                                 $targetUrl = $isDraft ? Url::to(['/memo/update', 'id' => $memo->id]) : Url::to(['/memo/view', 'id' => $memo->id]);
                                 
                                 // ผู้ส่ง / สายเสนอ
-                                $senderName = $isCreator ? $identity->displayName() : ($memo->createdBy ? $memo->createdBy->displayName() : 'บันทึกข้อความ');
+                                $senderName = $isCreator ? $identity->displayName() : ($memo->creator ? $memo->creator->displayName() : 'บันทึกข้อความ');
                                 $initial = $getInitial($senderName);
                                 ?>
                                 <a href="<?= $targetUrl ?>" class="list-group-item list-group-item-action py-3 px-3 border-bottom d-flex align-items-start gap-3 text-decoration-none position-relative apple-mail-row">

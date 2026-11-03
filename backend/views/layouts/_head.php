@@ -21,6 +21,13 @@ $this->registerMetaTag(
         'content' => 'width=device-width, initial-scale=1',
     ],
 );
+$this->registerMetaTag(
+    [
+        'name' => 'color-scheme',
+        'content' => 'light',
+    ],
+    'color-scheme',
+);
 if (!empty($this->params['meta_description'])) {
     $this->registerMetaTag(
         [

@@ -15,6 +15,13 @@ $this->render('_head');
 <!DOCTYPE html>
 <html lang="<?= Yii::$app->language ?>" class="h-100" data-bs-theme="light">
 <head>
+    <meta name="color-scheme" content="light">
+    <script>
+        try {
+            localStorage.removeItem('theme');
+            document.documentElement.setAttribute('data-bs-theme', 'light');
+        } catch (e) {}
+    </script>
     <?php $this->head() ?>
     <title><?= Html::encode($this->title) ?></title>
 </head>
