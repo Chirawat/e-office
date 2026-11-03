@@ -40,8 +40,6 @@ $this->render('_head');
     </div>
 </main>
 
-<?= $this->render('_footer') ?>
-
 <?php $this->endBody() ?>
 </body>
 </html>
