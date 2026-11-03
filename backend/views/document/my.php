@@ -24,7 +24,19 @@ $docModels = $docDataProvider->getModels();
 $memoModels = $memoDataProvider->getModels();
 
 $this->registerCss('
+/* ป้องกันการล้นจอแนวนอนในทุกระดับ (Full Mobile Horizontal Containment) */
+html, body, .eoffice-body, main, .eoffice-main, .eoffice-container, .eoffice-page {
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+}
+
 .apple-mail-row {
+    display: flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
     transition: background-color 0.15s ease-in-out;
     border-color: #f1f5f9 !important;
 }
@@ -32,49 +44,117 @@ $this->registerCss('
     background-color: #f8fafc !important;
 }
 .apple-mail-avatar {
-    width: 42px;
-    height: 42px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #ffffff;
     font-weight: 600;
-    font-size: 1.05rem;
-    letter-spacing: -0.02em;
+    font-size: 0.92rem;
     user-select: none;
     flex-shrink: 0;
 }
 .apple-blue-dot {
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background-color: #007aff;
     display: inline-block;
     flex-shrink: 0;
 }
+.apple-mail-body {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    width: 0 !important; /* Force flex child to respect parent width and truncate properly */
+    overflow: hidden !important;
+}
+.apple-mail-header {
+    display: flex !important;
+    align-items: baseline !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin-bottom: 2px !important;
+}
 .apple-mail-sender {
-    font-size: 0.98rem;
+    font-size: 0.92rem;
     font-weight: 700;
     color: #1e293b;
-    letter-spacing: -0.01em;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
 }
 .apple-mail-date {
-    font-size: 0.82rem;
+    font-size: 0.72rem;
     color: #64748b;
     font-weight: 400;
-    white-space: nowrap;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    text-align: right;
 }
 .apple-mail-subject {
-    font-size: 0.92rem;
+    font-size: 0.86rem;
     font-weight: 600;
     color: #0f172a;
     line-height: 1.35;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    margin-bottom: 2px !important;
 }
 .apple-mail-snippet {
-    font-size: 0.84rem;
+    font-size: 0.8rem;
     color: #64748b;
     line-height: 1.3;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+@media (max-width: 575.98px) {
+    .eoffice-container {
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+    }
+    .content-card {
+        border-radius: 8px !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+    .apple-mail-row {
+        padding-left: 8px !important;
+        padding-right: 8px !important;
+        gap: 8px !important;
+    }
+    .apple-mail-avatar {
+        width: 32px;
+        height: 32px;
+        font-size: 0.82rem;
+    }
+    .apple-mail-sender {
+        font-size: 0.88rem;
+    }
+    .apple-mail-date {
+        font-size: 0.7rem;
+    }
+    .erp-nav-tab {
+        padding: 8px 10px !important;
+        font-size: 0.8rem !important;
+        gap: 4px !important;
+    }
+    .erp-nav-tab .tab-badge {
+        padding: 1px 6px !important;
+        font-size: 0.7rem !important;
+    }
 }
 ');
 
@@ -119,39 +199,12 @@ $memoStatusBadge = static function (Memo $model): string {
 
 <div class="eoffice-page">
 
-    <!-- Header สรุปข้อมูลผู้ใช้แบบกะทัดรัด (Compact Mobile Header) -->
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2 pb-2 border-bottom">
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            <h1 class="h6 fw-bold text-dark mb-0 d-flex align-items-center gap-1">
-                <i class="bi bi-briefcase-fill text-primary"></i>
-                <span>โต๊ะทำงานของฉัน</span>
-            </h1>
-            <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-1"><?= Html::encode($roleLabel) ?></span>
-            <span class="small fw-semibold text-dark"><?= Html::encode($identity->displayName()) ?></span>
-            <?php if ($identity->department !== null): ?>
-                <span class="small text-muted d-none d-sm-inline">• <?= Html::encode($identity->department->name) ?></span>
-            <?php endif; ?>
-        </div>
-
-        <!-- แถบสรุปเฉพาะงานค้างที่ต้องทำแบบกะทัดรัด (Compact Quick Switch Badges) -->
-        <div class="d-flex align-items-center gap-1 flex-wrap">
-            <?php if ($stats['doc_pending'] === 0 && $stats['memo_active'] === 0): ?>
-                <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 d-inline-flex align-items-center gap-1 small">
-                    <i class="bi bi-check-circle-fill"></i> ไม่มีงานค้าง
-                </span>
-            <?php else: ?>
-                <button type="button" class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 py-1 px-2 d-inline-flex align-items-center gap-1 btn btn-link p-0 text-decoration-none" onclick="const t = document.querySelector('#doc-tab-btn'); if(t){ bootstrap.Tab.getOrCreateInstance(t).show(); }">
-                    <i class="bi bi-inbox-fill"></i>
-                    <span>หนังสือเข้า:</span>
-                    <strong class="font-monospace"><?= Html::encode((string) $stats['doc_pending']) ?></strong>
-                </button>
-                <button type="button" class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-50 py-1 px-2 d-inline-flex align-items-center gap-1 btn btn-link p-0 text-decoration-none" onclick="const t = document.querySelector('#memo-tab-btn'); if(t){ bootstrap.Tab.getOrCreateInstance(t).show(); }">
-                    <i class="bi bi-hourglass-split text-warning"></i>
-                    <span>บันทึกข้อความ:</span>
-                    <strong class="font-monospace"><?= Html::encode((string) $stats['memo_active']) ?></strong>
-                </button>
-            <?php endif; ?>
-        </div>
+    <!-- Header สรุปข้อมูลเฉพาะโต๊ะทำงานของฉัน (Minimal Mobile Header) -->
+    <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
+        <h1 class="h6 fw-bold text-dark mb-0 d-flex align-items-center gap-1">
+            <i class="bi bi-briefcase-fill text-primary"></i>
+            <span>โต๊ะทำงานของฉัน</span>
+        </h1>
     </div>
 
     <!-- แท็บสลับการแสดงผล หนังสือเข้า และ บันทึกข้อความ (Compact Tab Card) -->
@@ -188,16 +241,6 @@ $memoStatusBadge = static function (Memo $model): string {
 
             <!-- TAB 1: หนังสือเข้า -->
             <div class="tab-pane fade show active" id="tab-doc" role="tabpanel" aria-labelledby="doc-tab-btn" tabindex="0">
-                
-                <!-- หัวบาร์ย่อยระบุสถานะและปุ่มดูทั้งหมด (Sub-bar) -->
-                <div class="py-1 px-3 bg-light bg-opacity-50 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
-                    <span class="small text-muted" style="font-size: 0.82rem;">
-                        <i class="bi bi-info-circle text-primary me-1"></i>หนังสือเข้าที่มอบหมายถึงท่าน รอดำเนินการ
-                    </span>
-                    <a href="<?= Url::to(['/document/index', 'scope' => 'my']) ?>" class="small text-decoration-none" style="font-size: 0.82rem;">
-                        ดูทะเบียนของฉันทั้งหมด <i class="bi bi-chevron-right"></i>
-                    </a>
-                </div>
 
                 <!-- รายการหนังสือในสไตล์ Apple Mail App -->
                 <div>
@@ -230,10 +273,10 @@ $memoStatusBadge = static function (Memo $model): string {
                                     </div>
 
                                     <!-- Mail Content Body -->
-                                    <div class="flex-grow-1 min-w-0">
+                                    <div class="apple-mail-body">
                                         <!-- Line 1: Sender Name + Date (Apple Mail header style) -->
-                                        <div class="d-flex align-items-baseline justify-content-between gap-2 mb-1">
-                                            <div class="apple-mail-sender text-truncate">
+                                        <div class="apple-mail-header">
+                                            <div class="apple-mail-sender">
                                                 <?= Html::encode($senderText) ?>
                                             </div>
                                             <div class="apple-mail-date">
@@ -242,7 +285,7 @@ $memoStatusBadge = static function (Memo $model): string {
                                         </div>
 
                                         <!-- Line 2: Subject (Bold Title) -->
-                                        <div class="apple-mail-subject mb-1 text-truncate">
+                                        <div class="apple-mail-subject">
                                             <?php if ($doc->urgency === Document::URGENCY_MOST_URGENT || $doc->urgency === Document::URGENCY_VERY_URGENT): ?>
                                                 <span class="badge bg-danger text-white py-0 px-1 me-1" style="font-size: 0.72rem;">ด่วนมาก</span>
                                             <?php elseif ($doc->urgency === Document::URGENCY_URGENT): ?>
@@ -252,7 +295,7 @@ $memoStatusBadge = static function (Memo $model): string {
                                         </div>
 
                                         <!-- Line 3: Snippet / Summary text (เลขรับ, รายละเอียด) -->
-                                        <div class="apple-mail-snippet text-truncate">
+                                        <div class="apple-mail-snippet">
                                             <span class="text-primary font-monospace fw-semibold me-1">เลขรับ: <?= Html::encode($doc->receive_no) ?></span>
                                             <?php if (!empty($doc->external_no)): ?>
                                                 <span>• เลขที่หนังสือ: <?= Html::encode($doc->external_no) ?></span>
@@ -268,32 +311,10 @@ $memoStatusBadge = static function (Memo $model): string {
                     <?php endif; ?>
                 </div>
 
-                <!-- ท้ายแท็บ: ทางลัดไปหน้าหนังสือทั้งหมด -->
-                <div class="py-2 px-3 border-top bg-light text-end">
-                    <a href="<?= Url::to(['/document/index', 'scope' => 'all']) ?>" class="small text-decoration-none text-muted" style="font-size: 0.82rem;">
-                        <i class="bi bi-globe2 me-1"></i> ทะเบียนหนังสือเข้าทั้งหมด <i class="bi bi-chevron-right"></i>
-                    </a>
-                </div>
-
             </div>
 
             <!-- TAB 2: บันทึกข้อความ -->
             <div class="tab-pane fade" id="tab-memo" role="tabpanel" aria-labelledby="memo-tab-btn" tabindex="0">
-                
-                <!-- หัวบาร์ย่อยระบุสถานะและปุ่มสร้าง/ดูทั้งหมด (Sub-bar) -->
-                <div class="py-1 px-3 bg-light bg-opacity-50 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
-                    <span class="small text-muted" style="font-size: 0.82rem;">
-                        <i class="bi bi-info-circle text-teal me-1" style="color: #0f766e;"></i>บันทึกข้อความของคุณที่อยู่ระหว่างดำเนินการ
-                    </span>
-                    <div class="d-flex align-items-center gap-2">
-                        <a href="<?= Url::to(['/memo/create']) ?>" class="btn btn-xs btn-sm btn-success py-0 px-2 small d-inline-flex align-items-center gap-1 d-sm-none" style="font-size: 0.78rem;">
-                            <i class="bi bi-plus-lg"></i> ร่างใหม่
-                        </a>
-                        <a href="<?= Url::to(['/memo/index']) ?>" class="small text-decoration-none text-muted" style="font-size: 0.82rem;">
-                            ดูทั้งหมด <i class="bi bi-chevron-right"></i>
-                        </a>
-                    </div>
-                </div>
 
                 <!-- รายการบันทึกข้อความในสไตล์ Apple Mail App -->
                 <div>
@@ -334,10 +355,10 @@ $memoStatusBadge = static function (Memo $model): string {
                                     </div>
 
                                     <!-- Mail Content Body -->
-                                    <div class="flex-grow-1 min-w-0">
+                                    <div class="apple-mail-body">
                                         <!-- Line 1: Sender Name + Date (Apple Mail header style) -->
-                                        <div class="d-flex align-items-baseline justify-content-between gap-2 mb-1">
-                                            <div class="apple-mail-sender text-truncate">
+                                        <div class="apple-mail-header">
+                                            <div class="apple-mail-sender">
                                                 <?= Html::encode($senderName) ?>
                                                 <?php if ($isCreator): ?>
                                                     <span class="badge bg-light text-secondary border fw-normal py-0 px-1 ms-1" style="font-size: 0.7rem;">คุณ</span>
@@ -349,13 +370,13 @@ $memoStatusBadge = static function (Memo $model): string {
                                         </div>
 
                                         <!-- Line 2: Subject (Bold Title) -->
-                                        <div class="apple-mail-subject mb-1 text-truncate">
+                                        <div class="apple-mail-subject">
                                             <?= $memoStatusBadge($memo) ?>
                                             <span class="ms-1"><?= Html::encode($memo->subject) ?></span>
                                         </div>
 
                                         <!-- Line 3: Snippet / Summary text (เลขที่บันทึก, ผู้รับเรื่องปัจจุบัน) -->
-                                        <div class="apple-mail-snippet text-truncate">
+                                        <div class="apple-mail-snippet">
                                             <span class="font-monospace fw-semibold text-dark me-1"><?= Html::encode($memo->memo_no ?: '(ฉบับร่าง)') ?></span>
                                             <?php if ($memo->currentActor !== null): ?>
                                                 <span>• ส่งถึง: <?= Html::encode($memo->currentActor->displayName()) ?></span>
@@ -369,13 +390,6 @@ $memoStatusBadge = static function (Memo $model): string {
                             <?php endforeach; ?>
                         </div>
                     <?php endif; ?>
-                </div>
-
-                <!-- ท้ายแท็บ: ทางลัดไปหน้ารายการบันทึกข้อความทั้งหมด -->
-                <div class="py-2 px-3 border-top bg-light text-end">
-                    <a href="<?= Url::to(['/memo/index']) ?>" class="small text-decoration-none text-muted" style="font-size: 0.82rem;">
-                        <i class="bi bi-journal-text me-1"></i> รายการบันทึกข้อความทั้งหมด <i class="bi bi-chevron-right"></i>
-                    </a>
                 </div>
 
             </div>
