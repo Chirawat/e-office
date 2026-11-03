@@ -48,6 +48,8 @@ $thaiDate = static function (?string $date): string {
 ?>
 
 <div class="eoffice-page">
+
+    <!-- Header สรุปข้อมูลหน้าจอแบบกะทัดรัด -->
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 pb-2 border-bottom">
         <div>
             <h1 class="h5 fw-bold text-dark mb-0"><?= Html::encode($this->title) ?></h1>
@@ -63,25 +65,48 @@ $thaiDate = static function (?string $date): string {
         </div>
     </div>
 
-    <!-- แถบสลับโหมดมุมมอง: หนังสือภายนอกทั้งหมด vs เฉพาะที่เกี่ยวกับตัวเอง (Mobile-First Pill Badges) -->
+    <!-- ส่วนที่ 1: ค้นหาหนังสือ (ปรับขึ้นมาไว้ด้านบนตามความต้องการ) -->
+    <div class="content-card search-card table-search-card mb-3">
+        <?= Html::beginForm(['index'], 'get', ['class' => 'document-search-form']) ?>
+            <?php if ($isGeneralStaff): ?>
+                <?= Html::hiddenInput('scope', $scope) ?>
+            <?php endif; ?>
+            <div>
+                <label class="form-label fw-semibold" for="document-search">
+                    <i class="bi bi-search me-1 text-primary"></i>ค้นหาหนังสือรับ
+                </label>
+                <?= Html::textInput('q', $keyword, [
+                    'id' => 'document-search',
+                    'class' => 'form-control',
+                    'placeholder' => 'พิมพ์ค้นหาจากชื่อเรื่อง, เลขที่ต้นเรื่อง หรือเลขรับ...',
+                ]) ?>
+            </div>
+            <div class="search-actions">
+                <?= Html::submitButton('<i class="bi bi-search me-1" aria-hidden="true"></i><span>ค้นหา</span>', ['class' => 'btn btn-primary fw-semibold']) ?>
+                <?php if ($keyword !== ''): ?>
+                    <?= Html::a('<i class="bi bi-x-circle me-1" aria-hidden="true"></i><span>ล้างการค้นหา</span>', Url::to(['index', 'scope' => $scope]), ['class' => 'btn btn-outline-secondary']) ?>
+                <?php endif; ?>
+            </div>
+        <?= Html::endForm() ?>
+    </div>
+
+    <!-- ส่วนที่ 2: Tab สลับระหว่าง "หนังสือภายนอกทั้งหมด" และ "เฉพาะเกี่ยวกับตัวเอง" -->
     <?php if ($isGeneralStaff): ?>
-        <div class="d-flex align-items-center gap-2 flex-wrap mb-3">
+        <nav class="erp-nav-tabs" role="tablist" aria-label="ขอบเขตหนังสือภายนอก">
             <a href="<?= Url::to(['index', 'scope' => 'all', 'q' => $keyword]) ?>" 
-               class="badge text-decoration-none py-2 px-3 d-inline-flex align-items-center gap-2 <?= $scope === 'all' ? 'bg-primary text-white shadow-sm' : 'bg-white text-secondary border' ?>"
-               style="font-size: 0.85rem; font-weight: 500;">
+               class="erp-nav-tab <?= $scope === 'all' ? 'active' : '' ?>">
                 <i class="bi bi-globe2"></i>
-                <span>1. หนังสือภายนอก (ทั้งหมด)</span>
-                <span class="badge <?= $scope === 'all' ? 'bg-white text-primary' : 'bg-light text-dark border' ?> rounded-pill font-monospace"><?= $countAll ?></span>
+                <span>หนังสือภายนอกทั้งหมด</span>
+                <span class="tab-badge font-monospace"><?= $countAll ?></span>
             </a>
 
             <a href="<?= Url::to(['index', 'scope' => 'my', 'q' => $keyword]) ?>" 
-               class="badge text-decoration-none py-2 px-3 d-inline-flex align-items-center gap-2 <?= $scope === 'my' ? 'bg-primary text-white shadow-sm' : 'bg-white text-secondary border' ?>"
-               style="font-size: 0.85rem; font-weight: 500;">
+               class="erp-nav-tab <?= $scope === 'my' ? 'active' : '' ?>">
                 <i class="bi bi-person-check-fill text-warning"></i>
-                <span>2. เฉพาะเกี่ยวกับตัวเอง</span>
-                <span class="badge <?= $scope === 'my' ? 'bg-white text-primary' : 'bg-warning-subtle text-warning-emphasis border border-warning' ?> rounded-pill font-monospace"><?= $countMy ?></span>
+                <span>เฉพาะเกี่ยวกับตัวเอง</span>
+                <span class="tab-badge font-monospace"><?= $countMy ?></span>
             </a>
-        </div>
+        </nav>
     <?php else: ?>
         <!-- สรุปสถานะทั่วไปสำหรับ Admin / ผู้บริหาร -->
         <div class="p-2 bg-white rounded-3 border shadow-sm mb-3">
@@ -95,34 +120,13 @@ $thaiDate = static function (?string $date): string {
         </div>
     <?php endif; ?>
 
-    <div class="content-card search-card table-search-card">
-        <?= Html::beginForm(['index'], 'get', ['class' => 'document-search-form']) ?>
-            <?php if ($isGeneralStaff): ?>
-                <?= Html::hiddenInput('scope', $scope) ?>
-            <?php endif; ?>
-            <div>
-                <label class="form-label" for="document-search">ค้นหาหนังสือ</label>
-                <?= Html::textInput('q', $keyword, [
-                    'id' => 'document-search',
-                    'class' => 'form-control',
-                    'placeholder' => 'ค้นจากชื่อเรื่อง, เลขที่ต้นเรื่อง หรือเลขรับ',
-                ]) ?>
-            </div>
-            <div class="search-actions">
-                <?= Html::submitButton('<i class="bi bi-search" aria-hidden="true"></i><span>ค้นหา</span>', ['class' => 'btn btn-primary']) ?>
-                <?php if ($keyword !== ''): ?>
-                    <?= Html::a('<i class="bi bi-x-circle" aria-hidden="true"></i><span>ล้าง</span>', Url::to(['index', 'scope' => $scope]), ['class' => 'btn btn-outline-secondary']) ?>
-                <?php endif; ?>
-            </div>
-        <?= Html::endForm() ?>
-    </div>
-
-    <div class="content-card">
+    <!-- ส่วนที่ 3: ตารางรายการหนังสือ -->
+    <div class="content-card mt-0" style="<?= $isGeneralStaff ? 'border-top-left-radius: 0; border-top-right-radius: 0; border-top: 0;' : '' ?>">
         <?= GridView::widget([
             'dataProvider' => $dataProvider,
             'tableOptions' => ['class' => 'table table-hover align-middle mb-0'],
-            'summary' => 'แสดงรายการที่ {begin}-{end} จากทั้งหมด {totalCount} รายการ',
-            'emptyText' => 'ไม่พบรายการหนังสือภายนอก',
+            'summary' => '<div class="small text-muted py-2 px-3">แสดงรายการที่ {begin}-{end} จากทั้งหมด {totalCount} รายการ</div>',
+            'emptyText' => '<div class="text-center py-4 text-muted"><i class="bi bi-inbox fs-2 text-muted d-block mb-1"></i>ไม่พบรายการหนังสือภายนอก</div>',
             'columns' => [
                 [
                     'attribute' => 'receive_no',
@@ -150,10 +154,10 @@ $thaiDate = static function (?string $date): string {
                     'value' => static function (Document $model): string {
                         $label = Document::urgencyOptions()[$model->urgency] ?? $model->urgency;
                         if ($model->urgency === Document::URGENCY_MOST_URGENT || $model->urgency === Document::URGENCY_VERY_URGENT) {
-                            return '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">' . Html::encode($label) . '</span>';
+                            return '<span class="badge bg-danger text-white">' . Html::encode($label) . '</span>';
                         }
                         if ($model->urgency === Document::URGENCY_URGENT) {
-                            return '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">' . Html::encode($label) . '</span>';
+                            return '<span class="badge bg-warning text-dark">' . Html::encode($label) . '</span>';
                         }
                         return '<span class="badge bg-light text-secondary border">' . Html::encode($label) . '</span>';
                     },
@@ -170,4 +174,5 @@ $thaiDate = static function (?string $date): string {
             ],
         ]) ?>
     </div>
+
 </div>

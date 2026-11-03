@@ -2021,4 +2021,64 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
     border-top-right-radius: 8px;
 }
 
+/* ERP DOCUMENT TABS */
+.erp-nav-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid #e2e8f0;
+    margin-bottom: 0;
+    padding: 0 4px;
+    list-style: none;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.erp-nav-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    font-size: 0.875rem;
+    font-family: 'Prompt', sans-serif;
+    font-weight: 500;
+    color: #64748b;
+    text-decoration: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.15s ease-in-out;
+    white-space: nowrap;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+
+.erp-nav-tab:hover {
+    color: #155eef;
+    background-color: rgba(21, 94, 239, 0.04);
+}
+
+.erp-nav-tab.active {
+    color: #155eef;
+    font-weight: 700;
+    border-bottom-color: #155eef;
+    background-color: #ffffff;
+}
+
+.erp-nav-tab .tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 999px;
+    background-color: #f1f5f9;
+    color: #475569;
+}
+
+.erp-nav-tab.active .tab-badge {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
+
 

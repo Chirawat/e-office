@@ -22,7 +22,7 @@ $statusClass = 'status-badge-' . str_replace('_', '-', $model->status);
 $latestAction = $model->actions !== [] ? $model->actions[count($model->actions) - 1] : null;
 $pdfVersion = (string) Yii::$app->request->get('pdfv', (string) ($model->updated_at ?: time()));
 $memoPdfUrl = Url::to(['pdf', 'id' => $model->id, 'v' => $pdfVersion]);
-$previewImageUrl = $previewImagePath ? Url::to('@web/' . ltrim($previewImagePath, '/'), true) : null;
+$previewImageUrl = $previewImagePath ? Url::to('@web/' . ltrim($previewImagePath, '/')) : null;
 $csrf = Html::hiddenInput(Yii::$app->request->csrfParam, Yii::$app->request->csrfToken);
 $canEdit = $identity instanceof User
     && ((int) $model->created_by === (int) $identity->id || $identity->hasRole(User::ROLE_ADMIN))
@@ -72,12 +72,9 @@ $thaiDateTime = static function (int|string|null $value): string {
     return (int) date('j', $timestamp) . ' ' . $months[(int) date('n', $timestamp)] . ' ' . ((int) date('Y', $timestamp) + 543) . ' ' . date('H:i', $timestamp) . ' น.';
 };
 
-if ($useBrowserPdfPreview) {
-    $this->registerJsFile('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs', [
-        'type' => 'module',
-        'position' => \yii\web\View::POS_HEAD,
-    ]);
-}
+$this->registerJsFile('@web/js/pdf.min.js', [
+    'position' => \yii\web\View::POS_HEAD,
+]);
 ?>
 
 <div class="eoffice-page">
@@ -121,13 +118,61 @@ if ($useBrowserPdfPreview) {
                     <span class="preview-badge stamped">PDF บันทึกข้อความ</span>
                     <span class="muted-text">แสดงเอกสารฉบับเดียวกับปุ่มเปิด PDF</span>
                 </div>
-                <?php if ($previewImageUrl): ?>
-                    <div class="pdf-preview-canvas" data-page-width="216" data-page-height="297">
-                        <img
-                            class="pdf-page-image"
-                            src="<?= Html::encode($previewImageUrl) ?>?v=<?= Html::encode($pdfVersion) ?>"
-                            alt="<?= Html::encode('PDF บันทึกข้อความ ' . $model->subject) ?>"
-                        >
+
+                <!-- PDF Controls Toolbar (Mobile & iPad friendly) -->
+                <div class="pdf-viewer-controls p-2 bg-light border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-1">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="pdf-prev-page" title="หน้าก่อนหน้า">
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <span class="small font-monospace px-2 text-dark" id="pdf-page-num-display">
+                            หน้า <strong id="pdf-current-page">1</strong> / <span id="pdf-total-pages">-</span>
+                        </span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="pdf-next-page" title="หน้าถัดไป">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="d-flex align-items-center gap-1">
+                        <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="pdf-zoom-out" title="ย่อ">
+                            <i class="bi bi-zoom-out"></i>
+                        </button>
+                        <span class="small font-monospace px-1 text-muted" id="pdf-zoom-level">100%</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="pdf-zoom-in" title="ขยาย">
+                            <i class="bi bi-zoom-in"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="pdf-zoom-fit" title="พอดีหน้าจอ">
+                            <i class="bi bi-arrows-fullscreen"></i>
+                        </button>
+                        <a href="<?= Html::encode($memoPdfUrl) ?>" target="_blank" class="btn btn-sm btn-success fw-semibold ms-1 d-inline-flex align-items-center gap-1">
+                            <i class="bi bi-box-arrow-up-right"></i>
+                            <span>เปิดเต็มจอ</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Canvas Area -->
+                <div class="pdf-canvas-wrapper text-center p-2 p-md-3" id="pdf-canvas-wrapper" style="overflow-x: auto; background: #64748b; min-height: 480px;">
+                    <div id="pdf-loading-indicator" class="py-5 text-white">
+                        <div class="spinner-border text-light mb-2" role="status"></div>
+                        <div>กำลังโหลดเอกสาร PDF...</div>
+                    </div>
+
+                    <div id="pdf-error-fallback" class="d-none py-5 bg-white rounded p-4 text-center my-3 shadow-sm mx-auto" style="max-width: 500px;">
+                        <i class="bi bi-file-earmark-pdf text-success fs-1 d-block mb-2"></i>
+                        <h5 class="fw-bold text-dark">เปิดอ่านบันทึกข้อความ PDF</h5>
+                        <p class="text-muted small">สามารถแตะปุ่มด้านล่างเพื่อเปิดอ่านบน iPad หรือมือถือได้ทันที</p>
+                        <a href="<?= Html::encode($memoPdfUrl) ?>" target="_blank" class="btn btn-success fw-semibold px-4 py-2 mt-2">
+                            <i class="bi bi-box-arrow-up-right me-1"></i> แตะเพื่อเปิดอ่านไฟล์ PDF
+                        </a>
+                    </div>
+
+                    <div class="pdf-preview-canvas d-none d-inline-block position-relative shadow-lg rounded" id="pdf-page-container" 
+                         data-page-width="216" data-page-height="297" 
+                         data-pdf-url="<?= Html::encode($memoPdfUrl) ?>"
+                         data-worker-url="<?= Url::to('@web/js/pdf.worker.min.js') ?>">
+                        <canvas id="pdf-main-canvas" class="pdf-page-image rounded" style="display: block; max-width: 100%; height: auto; background: #fff;"></canvas>
+
                         <?php if ($canAdjustStampPositions): ?>
                             <div class="stamp-preview-layer" aria-hidden="true">
                                 <?php foreach ($stampPositionDefaults as $type => $config): ?>
@@ -143,34 +188,7 @@ if ($useBrowserPdfPreview) {
                             </div>
                         <?php endif; ?>
                     </div>
-                <?php elseif ($useBrowserPdfPreview): ?>
-                    <div class="fallback-warning pdfjs-preview-status">
-                        shared host ไม่สามารถสร้างภาพ preview จาก server ได้ ระบบจึง render หน้าแรกด้วย browser เพื่อปรับตำแหน่งลายเซ็น
-                    </div>
-                    <div class="pdf-preview-canvas pdfjs-preview-canvas" data-page-width="216" data-page-height="297" data-pdf-url="<?= Html::encode($memoPdfUrl) ?>">
-                        <canvas class="pdf-page-image pdfjs-page-canvas" aria-label="<?= Html::encode('PDF บันทึกข้อความ ' . $model->subject) ?>"></canvas>
-                        <div class="stamp-preview-layer" aria-hidden="true">
-                            <?php foreach ($stampPositionDefaults as $type => $config): ?>
-                                <div
-                                    class="stamp-preview-box memo-signature-preview-box"
-                                    data-stamp-box="<?= Html::encode((string) $type) ?>"
-                                    data-width-mm="<?= Html::encode((string) $config['w']) ?>"
-                                    data-height-mm="<?= Html::encode((string) $config['h']) ?>"
-                                >
-                                    <span><?= Html::encode($config['label']) ?></span>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                <?php else: ?>
-                    <div class="pdf-preview-fallback">
-                        <iframe
-                            class="pdf-preview"
-                            src="<?= Html::encode($memoPdfUrl) ?>#toolbar=1&navpanes=0&view=FitH"
-                            title="<?= Html::encode('PDF บันทึกข้อความ ' . $model->subject) ?>"
-                        ></iframe>
-                    </div>
-                <?php endif; ?>
+                </div>
             </div>
         </section>
 
@@ -315,15 +333,37 @@ if ($useBrowserPdfPreview) {
 <?php
 $this->registerJs(<<<'JS'
 (function () {
-    const canvas = document.querySelector('.pdf-preview-canvas');
-    if (!canvas) {
+    const canvasContainer = document.getElementById('pdf-page-container');
+    if (!canvasContainer || !canvasContainer.dataset.pdfUrl) {
         return;
     }
 
-    const pageWidth = parseFloat(canvas.dataset.pageWidth || '216');
-    let pageHeight = parseFloat(canvas.dataset.pageHeight || '297');
-    const pageImage = canvas.querySelector('.pdf-page-image');
-    const pdfjsCanvas = canvas.querySelector('.pdfjs-page-canvas');
+    const pdfUrl = canvasContainer.dataset.pdfUrl;
+    const pageWidth = parseFloat(canvasContainer.dataset.pageWidth || '216');
+    let pageHeight = parseFloat(canvasContainer.dataset.pageHeight || '297');
+    const mainCanvas = document.getElementById('pdf-main-canvas');
+    if (!mainCanvas) return;
+    const ctx = mainCanvas.getContext('2d');
+
+    const loadingIndicator = document.getElementById('pdf-loading-indicator');
+    const errorFallback = document.getElementById('pdf-error-fallback');
+    const pageNumDisplay = document.getElementById('pdf-current-page');
+    const totalPagesDisplay = document.getElementById('pdf-total-pages');
+    const prevBtn = document.getElementById('pdf-prev-page');
+    const nextBtn = document.getElementById('pdf-next-page');
+    const zoomInBtn = document.getElementById('pdf-zoom-in');
+    const zoomOutBtn = document.getElementById('pdf-zoom-out');
+    const zoomFitBtn = document.getElementById('pdf-zoom-fit');
+    const zoomLevelDisplay = document.getElementById('pdf-zoom-level');
+    const stampLayer = canvasContainer.querySelector('.stamp-preview-layer');
+
+    let pdfDoc = null;
+    let currentPageNum = 1;
+    let totalPages = 1;
+    let currentScale = 1.0;
+    let fitScale = 1.0;
+    let isRendering = false;
+    let pendingPageNum = null;
 
     function rounded(value) {
         return (Math.round(parseFloat(value || '0') * 10) / 10).toString();
@@ -332,9 +372,7 @@ $this->registerJs(<<<'JS'
     function updateStamp(type) {
         const control = document.querySelector(`[data-stamp-control="${type}"]`);
         const box = document.querySelector(`[data-stamp-box="${type}"]`);
-        if (!control || !box) {
-            return;
-        }
+        if (!control || !box) return;
 
         const xInput = control.querySelector('[data-axis="x"]');
         const yInput = control.querySelector('[data-axis="y"]');
@@ -360,61 +398,151 @@ $this->registerJs(<<<'JS'
         updateStamp(type);
     });
 
-    if (pageImage && !pdfjsCanvas) {
-        pageImage.addEventListener('load', () => {
-            if (pageImage.naturalWidth > 0) {
-                pageHeight = pageWidth * (pageImage.naturalHeight / pageImage.naturalWidth);
-                document.querySelectorAll('[data-axis="y"]').forEach((input) => {
-                    input.max = rounded(pageHeight);
-                });
-                document.querySelectorAll('[data-stamp-control]').forEach((control) => updateStamp(control.dataset.stampControl));
+    async function renderPage(num) {
+        if (!pdfDoc) return;
+        isRendering = true;
+
+        try {
+            const page = await pdfDoc.getPage(num);
+            const wrapper = document.getElementById('pdf-canvas-wrapper');
+            const availableWidth = Math.max((wrapper ? wrapper.clientWidth : 800) - 32, 280);
+            const unscaledViewport = page.getViewport({ scale: 1 });
+            
+            fitScale = availableWidth / unscaledViewport.width;
+            const effectiveScale = currentScale * fitScale;
+            const viewport = page.getViewport({ scale: effectiveScale });
+
+            const dpr = window.devicePixelRatio || 1;
+            mainCanvas.width = Math.floor(viewport.width * dpr);
+            mainCanvas.height = Math.floor(viewport.height * dpr);
+            mainCanvas.style.width = Math.floor(viewport.width) + 'px';
+            mainCanvas.style.height = Math.floor(viewport.height) + 'px';
+
+            ctx.save();
+            ctx.scale(dpr, dpr);
+
+            const renderContext = {
+                canvasContext: ctx,
+                viewport: viewport,
+            };
+
+            await page.render(renderContext).promise;
+            ctx.restore();
+
+            pageHeight = pageWidth * (unscaledViewport.height / unscaledViewport.width);
+            document.querySelectorAll('[data-axis="y"]').forEach((input) => {
+                input.max = rounded(pageHeight);
+            });
+
+            if (stampLayer) {
+                stampLayer.style.display = (num === 1) ? 'block' : 'none';
+                if (num === 1) {
+                    document.querySelectorAll('[data-stamp-control]').forEach((control) => updateStamp(control.dataset.stampControl));
+                }
+            }
+
+            if (pageNumDisplay) pageNumDisplay.textContent = num;
+            if (prevBtn) prevBtn.disabled = (num <= 1);
+            if (nextBtn) nextBtn.disabled = (num >= totalPages);
+
+            if (loadingIndicator) loadingIndicator.classList.add('d-none');
+            canvasContainer.classList.remove('d-none');
+        } catch (err) {
+            console.error('Error rendering page:', err);
+        } finally {
+            isRendering = false;
+            if (pendingPageNum !== null) {
+                const nextNum = pendingPageNum;
+                pendingPageNum = null;
+                renderPage(nextNum);
+            }
+        }
+    }
+
+    function queueRenderPage(num) {
+        if (isRendering) {
+            pendingPageNum = num;
+        } else {
+            renderPage(num);
+        }
+    }
+
+    function goToPage(num) {
+        if (num < 1 || num > totalPages) return;
+        currentPageNum = num;
+        queueRenderPage(currentPageNum);
+    }
+
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            if (currentPageNum > 1) goToPage(currentPageNum - 1);
+        });
+    }
+
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            if (currentPageNum < totalPages) goToPage(currentPageNum + 1);
+        });
+    }
+
+    if (zoomInBtn) {
+        zoomInBtn.addEventListener('click', () => {
+            if (currentScale < 2.5) {
+                currentScale = Math.round((currentScale + 0.25) * 100) / 100;
+                if (zoomLevelDisplay) zoomLevelDisplay.textContent = Math.round(currentScale * 100) + '%';
+                queueRenderPage(currentPageNum);
             }
         });
     }
 
-    async function renderPdfPreview() {
-        if (!pdfjsCanvas || !canvas.dataset.pdfUrl) {
+    if (zoomOutBtn) {
+        zoomOutBtn.addEventListener('click', () => {
+            if (currentScale > 0.5) {
+                currentScale = Math.round((currentScale - 0.25) * 100) / 100;
+                if (zoomLevelDisplay) zoomLevelDisplay.textContent = Math.round(currentScale * 100) + '%';
+                queueRenderPage(currentPageNum);
+            }
+        });
+    }
+
+    if (zoomFitBtn) {
+        zoomFitBtn.addEventListener('click', () => {
+            currentScale = 1.0;
+            if (zoomLevelDisplay) zoomLevelDisplay.textContent = '100%';
+            queueRenderPage(currentPageNum);
+        });
+    }
+
+    async function initPdf() {
+        if (typeof window.pdfjsLib === 'undefined') {
+            console.error('pdfjsLib is not loaded');
+            if (loadingIndicator) loadingIndicator.classList.add('d-none');
+            if (errorFallback) errorFallback.classList.remove('d-none');
             return;
         }
 
-        const status = document.querySelector('.pdfjs-preview-status');
         try {
-            const pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs');
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
-
-            const pdf = await pdfjsLib.getDocument(canvas.dataset.pdfUrl).promise;
-            const page = await pdf.getPage(1);
-            const baseViewport = page.getViewport({scale: 1});
-            pageHeight = pageWidth * (baseViewport.height / baseViewport.width);
-
-            const containerWidth = canvas.clientWidth || 780;
-            const scale = containerWidth / baseViewport.width;
-            const viewport = page.getViewport({scale});
-            const context = pdfjsCanvas.getContext('2d');
-            pdfjsCanvas.width = Math.floor(viewport.width);
-            pdfjsCanvas.height = Math.floor(viewport.height);
-
-            await page.render({canvasContext: context, viewport}).promise;
-            pdfjsCanvas.style.width = '100%';
-            pdfjsCanvas.style.height = 'auto';
-
-            document.querySelectorAll('[data-axis="y"]').forEach((input) => {
-                input.max = rounded(pageHeight);
-            });
-            document.querySelectorAll('[data-stamp-control]').forEach((control) => updateStamp(control.dataset.stampControl));
-
-            if (status) {
-                status.textContent = 'แสดง preview หน้าแรกด้วย browser สำหรับปรับตำแหน่งลายเซ็น';
-            }
-        } catch (error) {
-            if (status) {
-                status.textContent = 'ไม่สามารถ render preview ด้วย browser ได้ กรุณาเปิด PDF เต็มฉบับเพื่อตรวจเอกสาร';
-            }
-            console.error(error);
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = canvasContainer.dataset.workerUrl;
+            pdfDoc = await window.pdfjsLib.getDocument(pdfUrl).promise;
+            totalPages = pdfDoc.numPages;
+            if (totalPagesDisplay) totalPagesDisplay.textContent = totalPages;
+            renderPage(1);
+        } catch (err) {
+            console.error('Error loading PDF:', err);
+            if (loadingIndicator) loadingIndicator.classList.add('d-none');
+            if (errorFallback) errorFallback.classList.remove('d-none');
         }
     }
 
-    renderPdfPreview();
+    initPdf();
+
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            queueRenderPage(currentPageNum);
+        }, 200);
+    });
 })();
 JS);
 ?>
