@@ -159,88 +159,68 @@ if ($previewPdfUrl) {
 ?>
 
 <div class="eoffice-page">
-    <div class="eoffice-titlebar">
-        <div>
-            <h1><?= Html::encode($model->receive_no) ?></h1>
-            <p><?= Html::encode($model->subject) ?></p>
-        </div>
-        <?= Html::a('<i class="bi bi-arrow-left" aria-hidden="true"></i><span>กลับรายการหนังสือ</span>', ['index'], ['class' => 'btn btn-outline-secondary']) ?>
-    </div>
-
     <div class="document-workspace">
-        <section class="content-card">
-            <div class="pdf-toolbar">
-                <div>
-                    <strong><?= Html::encode($previewLabel) ?></strong>
-                    <span><?= $stampedPdfUrl ? 'กำลังแสดงเอกสารฉบับประทับตราแล้ว เหมือนอ่านบนกระดาษจริง' : 'ยังไม่มีฉบับประทับตรา ระบบจึงแสดง PDF ต้นฉบับก่อน' ?></span>
+        <section class="content-card pdf-card-section p-0 border-0 shadow-sm overflow-hidden">
+            <!-- Compact Header / Back Bar for Mobile & Desktop -->
+            <div class="pdf-viewer-header d-flex align-items-center justify-content-between p-2 px-3 bg-white border-bottom gap-2">
+                <div class="d-flex align-items-center gap-2 text-truncate">
+                    <?= Html::a('<i class="bi bi-arrow-left" aria-hidden="true"></i> <span class="d-none d-sm-inline">กลับ</span>', ['/document/index'], [
+                        'class' => 'btn btn-sm btn-outline-secondary py-1 px-2 text-nowrap',
+                        'title' => 'กลับรายการหนังสือ',
+                    ]) ?>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace text-nowrap">
+                        <?= Html::encode($model->receive_no) ?>
+                    </span>
+                    <span class="fw-semibold text-dark text-truncate small" title="<?= Html::encode($model->subject) ?>">
+                        <?= Html::encode($model->subject) ?>
+                    </span>
                 </div>
-                <div class="pdf-toolbar-actions">
-                    <?php if ($pdfUrl): ?>
-                        <?= Html::a('<i class="bi bi-file-earmark-pdf" aria-hidden="true"></i><span>เปิด PDF ต้นฉบับ</span>', $pdfUrl, ['class' => 'btn btn-outline-primary', 'target' => '_blank']) ?>
-                    <?php endif; ?>
-                    <?php if ($stampedPdfUrl): ?>
-                        <?= Html::a('<i class="bi bi-file-earmark-check" aria-hidden="true"></i><span>เปิด PDF ตราประทับ</span>', $stampedPdfUrl, ['class' => 'btn btn-success stamped-pdf-button', 'target' => '_blank']) ?>
-                    <?php endif; ?>
-                    <?php if ($showDebugRestamp && $canRegisterDocument): ?>
-                        <?= Html::beginForm(['generate-stamped-pdf', 'id' => $model->id], 'post', ['class' => 'inline-form']) ?>
-                            <?= $csrf ?>
-                            <?= Html::submitButton('<i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>Debug re-stamp</span>', [
-                                'class' => 'btn btn-warning debug-restamp-button',
-                                'title' => 'สร้าง PDF ใหม่เพื่อจูนกรอบ debug/lายเซ็น/วันที่',
-                            ]) ?>
-                        <?= Html::endForm() ?>
-                    <?php endif; ?>
+                <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                    <span class="status-badge <?= Html::encode($statusClass) ?>" style="font-size: 0.75rem; padding: 2px 8px; min-height: 24px;">
+                        <?= Html::encode($status) ?>
+                    </span>
                 </div>
             </div>
 
             <div class="pdf-preview-frame">
-                <div class="pdf-preview-status">
-                    <span class="<?= $stampedPdfUrl ? 'preview-badge stamped' : 'preview-badge original' ?>">
-                        <?= Html::encode($previewLabel) ?>
-                    </span>
-                    <?php if (!$stampedPdfUrl): ?>
-                        <span class="muted-text">ยังไม่พบ PDF ฉบับตราประทับ ระบบจะสร้างให้อัตโนมัติเมื่อมีการลงรับ/บันทึกตำแหน่ง</span>
-                    <?php endif; ?>
-                </div>
-
                 <?php if ($previewPdfUrl): ?>
-                    <!-- PDF Controls Toolbar (Mobile & iPad friendly) -->
-                    <div class="pdf-viewer-controls p-2 bg-light border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <!-- PDF Controls Toolbar (Sticky, Mobile-Optimized) -->
+                    <div class="pdf-viewer-controls p-2 bg-light border-bottom d-flex align-items-center justify-content-between flex-wrap gap-1 sticky-top" style="z-index: 10;">
                         <div class="d-flex align-items-center gap-1">
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="pdf-prev-page" title="หน้าก่อนหน้า">
+                            <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-1" id="pdf-prev-page" title="หน้าก่อนหน้า">
                                 <i class="bi bi-chevron-left"></i>
                             </button>
-                            <span class="small font-monospace px-2 text-dark" id="pdf-page-num-display">
-                                หน้า <strong id="pdf-current-page">1</strong> / <span id="pdf-total-pages">-</span>
+                            <span class="small font-monospace px-1 text-dark text-nowrap" id="pdf-page-num-display">
+                                <strong id="pdf-current-page">1</strong> / <span id="pdf-total-pages">-</span>
                             </span>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="pdf-next-page" title="หน้าถัดไป">
+                            <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-1" id="pdf-next-page" title="หน้าถัดไป">
                                 <i class="bi bi-chevron-right"></i>
                             </button>
                         </div>
                         
                         <div class="d-flex align-items-center gap-1">
-                            <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="pdf-zoom-out" title="ย่อ">
+                            <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-1" id="pdf-zoom-out" title="ย่อ">
                                 <i class="bi bi-zoom-out"></i>
                             </button>
-                            <span class="small font-monospace px-1 text-muted" id="pdf-zoom-level">100%</span>
-                            <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="pdf-zoom-in" title="ขยาย">
+                            <span class="small font-monospace px-1 text-muted d-none d-sm-inline" id="pdf-zoom-level">100%</span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-1" id="pdf-zoom-in" title="ขยาย">
                                 <i class="bi bi-zoom-in"></i>
                             </button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="pdf-zoom-fit" title="พอดีหน้าจอ">
+                            <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-1" id="pdf-zoom-fit" title="พอดีหน้าจอ">
                                 <i class="bi bi-arrows-fullscreen"></i>
                             </button>
-                            <a href="<?= Html::encode($previewPdfUrl) ?>" target="_blank" class="btn btn-sm btn-primary fw-semibold ms-1 d-inline-flex align-items-center gap-1">
+                            <a href="<?= Html::encode($previewPdfUrl) ?>" target="_blank" class="btn btn-sm btn-primary fw-semibold px-2 py-1 ms-1 d-inline-flex align-items-center gap-1" title="เปิดเอกสารแท็บใหม่">
                                 <i class="bi bi-box-arrow-up-right"></i>
-                                <span>เปิดเต็มจอ</span>
+                                <span class="d-none d-sm-inline">เต็มจอ</span>
                             </a>
                         </div>
                     </div>
 
                     <!-- Canvas Area -->
-                    <div class="pdf-canvas-wrapper text-center p-2 p-md-3" id="pdf-canvas-wrapper" style="overflow-x: auto; background: #64748b; min-height: 480px;">
+                    <div class="pdf-canvas-wrapper text-center p-0 p-sm-2" id="pdf-canvas-wrapper" style="overflow-x: auto; background: #475569; min-height: 480px; -webkit-overflow-scrolling: touch;">
                         <div id="pdf-loading-indicator" class="py-5 text-white">
                             <div class="spinner-border text-light mb-2" role="status"></div>
-                            <div>กำลังโหลดเอกสาร PDF...</div>
+                            <div class="small">กำลังโหลดเอกสาร PDF คมชัดสูง...</div>
                         </div>
 
                         <div id="pdf-error-fallback" class="d-none py-5 bg-white rounded p-4 text-center my-3 shadow-sm mx-auto" style="max-width: 500px;">
@@ -252,7 +232,7 @@ if ($previewPdfUrl) {
                             </a>
                         </div>
 
-                        <div class="pdf-preview-canvas d-none d-inline-block position-relative shadow-lg rounded" id="pdf-page-container" 
+                        <div class="pdf-preview-canvas d-none d-inline-block position-relative shadow rounded" id="pdf-page-container" 
                              data-page-width="216" data-page-height="297" 
                              data-pdf-url="<?= Html::encode($previewPdfUrl) ?>"
                              data-worker-url="<?= Url::to('@web/js/pdf.worker.min.js') ?>">
@@ -527,6 +507,7 @@ $this->registerJs(<<<'JS'
     let fitScale = 1.0;
     let isRendering = false;
     let pendingPageNum = null;
+    let renderTask = null;
 
     function rounded(value) {
         return (Math.round(parseFloat(value || '0') * 10) / 10).toString();
@@ -568,30 +549,57 @@ $this->registerJs(<<<'JS'
         try {
             const page = await pdfDoc.getPage(num);
             const wrapper = document.getElementById('pdf-canvas-wrapper');
-            const availableWidth = Math.max((wrapper ? wrapper.clientWidth : 800) - 32, 280);
+            // Full width utilization for small mobile screens
+            const containerWidth = wrapper ? wrapper.clientWidth : (window.innerWidth || 360);
+            const paddingOffset = window.innerWidth < 576 ? 0 : 16;
+            const availableWidth = Math.max(containerWidth - paddingOffset, 260);
             const unscaledViewport = page.getViewport({ scale: 1 });
             
             fitScale = availableWidth / unscaledViewport.width;
             const effectiveScale = currentScale * fitScale;
-            const viewport = page.getViewport({ scale: effectiveScale });
 
-            // High-DPI support for Retina display (iPad / iPhone)
-            const dpr = window.devicePixelRatio || 1;
-            mainCanvas.width = Math.floor(viewport.width * dpr);
-            mainCanvas.height = Math.floor(viewport.height * dpr);
-            mainCanvas.style.width = Math.floor(viewport.width) + 'px';
-            mainCanvas.style.height = Math.floor(viewport.height) + 'px';
+            // Ultra-sharp Retina / High-DPI rendering (2x to 3x DPR buffer)
+            const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 2), 3);
+            const viewport = page.getViewport({ scale: effectiveScale * dpr });
 
-            ctx.save();
-            ctx.scale(dpr, dpr);
+            mainCanvas.width = Math.floor(viewport.width);
+            mainCanvas.height = Math.floor(viewport.height);
+            const cssWidth = Math.floor(viewport.width / dpr);
+            const cssHeight = Math.floor(viewport.height / dpr);
+
+            mainCanvas.style.width = cssWidth + 'px';
+            mainCanvas.style.height = cssHeight + 'px';
+
+            // Allow panning / scroll when zoomed in
+            if (currentScale > 1.0) {
+                mainCanvas.style.maxWidth = 'none';
+                if (canvasContainer) canvasContainer.style.maxWidth = 'none';
+            } else {
+                mainCanvas.style.maxWidth = '100%';
+                if (canvasContainer) canvasContainer.style.maxWidth = '100%';
+            }
+
+            if (canvasContainer) {
+                canvasContainer.style.width = cssWidth + 'px';
+                canvasContainer.style.height = cssHeight + 'px';
+            }
+
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
+            if (renderTask) {
+                try {
+                    renderTask.cancel();
+                } catch (e) {}
+            }
 
             const renderContext = {
                 canvasContext: ctx,
                 viewport: viewport,
             };
 
-            await page.render(renderContext).promise;
-            ctx.restore();
+            renderTask = page.render(renderContext);
+            await renderTask.promise;
 
             // Calculate height aspect ratio for stamp overlay
             pageHeight = pageWidth * (unscaledViewport.height / unscaledViewport.width);
@@ -614,9 +622,13 @@ $this->registerJs(<<<'JS'
             if (loadingIndicator) loadingIndicator.classList.add('d-none');
             canvasContainer.classList.remove('d-none');
         } catch (err) {
+            if (err && err.name === 'RenderingCancelledException') {
+                return;
+            }
             console.error('Error rendering page:', err);
         } finally {
             isRendering = false;
+            renderTask = null;
             if (pendingPageNum !== null) {
                 const nextNum = pendingPageNum;
                 pendingPageNum = null;

@@ -17,9 +17,9 @@ $isOfficer = $identity instanceof User && ($identity->hasRole(User::ROLE_OFFICER
 
 $mainItems = [];
 
-// 1. หน้าหลัก
+// 1. หน้าแรก
 $mainItems[] = [
-    'label' => '<i class="bi bi-speedometer2 me-1" aria-hidden="true"></i><span>โต๊ะทำงาน (งานของฉัน)</span>',
+    'label' => '<i class="bi bi-house-door me-1" aria-hidden="true"></i><span>หน้าแรก</span>',
     'url' => ['/document/my'],
     'visible' => !Yii::$app->user->isGuest,
 ];
@@ -39,7 +39,7 @@ if ($isOfficer) {
     ];
 }
 $mainItems[] = [
-    'label' => '<i class="bi bi-folder2-open me-1" aria-hidden="true"></i><span>งานหนังสือรับ</span>',
+    'label' => '<i class="bi bi-folder2-open me-1" aria-hidden="true"></i><span>หนังสือภายนอก</span>',
     'items' => $docItems,
     'visible' => !Yii::$app->user->isGuest,
 ];
@@ -61,7 +61,7 @@ $memoItems = [
     ],
 ];
 $mainItems[] = [
-    'label' => '<i class="bi bi-pencil-square me-1" aria-hidden="true"></i><span>บันทึกข้อความ (e-Memo)</span>',
+    'label' => '<i class="bi bi-pencil-square me-1" aria-hidden="true"></i><span>บันทึกข้อความ</span>',
     'items' => $memoItems,
     'visible' => !Yii::$app->user->isGuest,
 ];
