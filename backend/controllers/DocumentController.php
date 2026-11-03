@@ -188,31 +188,22 @@ class DocumentController extends Controller
             ],
         ]);
 
-        // 3. สรุปสถิติสำหรับแถบ Badges บน Workbench Dashboard
+        // 3. สรุปสถิติงานที่ต้องดำเนินการ/ติดตามสำหรับช่วงทดลองใช้ (เฉพาะงานค้างที่ต้อง Take Action)
         $myAssignedDocCount = $docDataProvider->getTotalCount();
         
-        // จำนวนหนังสือที่เสร็จสิ้นแล้วของตนเอง
-        $completedDocQuery = Document::find()->select('{{%document}}.[[id]]')->where(['{{%document}}.[[status]]' => Document::STATUS_COMPLETED]);
-        if ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
-            $this->applyStaffAssignmentScope($completedDocQuery, $identity);
-        }
-        $myCompletedDocCount = count($completedDocQuery->column());
-
-        // สถิติบันทึกข้อความ
-        $myPendingMemosCount = (int) Memo::find()
-            ->where(['current_actor_id' => $identity->id])
-            ->andWhere(['not in', 'status', [Memo::STATUS_COMPLETED, Memo::STATUS_APPROVED]])
-            ->count();
-
-        $myCreatedMemosCount = (int) Memo::find()
-            ->where(['created_by' => $identity->id])
-            ->count();
+        // บันทึกข้อความที่กำลังอยู่ระหว่างดำเนินการ (เสนอตามสายงาน หรือรอตรวจ/ลงนาม)
+        $activeMemoQuery = Memo::find()
+            ->where(['not in', 'status', [Memo::STATUS_COMPLETED, Memo::STATUS_APPROVED]])
+            ->andWhere([
+                'or',
+                ['current_actor_id' => $identity->id],
+                ['created_by' => $identity->id],
+            ]);
+        $myActiveMemosCount = (int) $activeMemoQuery->count();
 
         $stats = [
             'doc_pending' => $myAssignedDocCount,
-            'doc_completed' => $myCompletedDocCount,
-            'memo_pending' => $myPendingMemosCount,
-            'memo_total' => $myCreatedMemosCount,
+            'memo_active' => $myActiveMemosCount,
         ];
 
         return $this->render('my', [
