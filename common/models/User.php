@@ -183,6 +183,14 @@ class User extends ActiveRecord implements IdentityInterface
             return true;
         }
 
+        // หากกำลังเปิดใช้งานโหมดผู้รักษาการแทน ผอ. และผู้ใช้รายนี้คือผู้ได้รับแต่งตั้งให้รักษาการ
+        if (in_array(self::ROLE_DIRECTOR, (array) $roles, true) && SystemSetting::isActingDirector()) {
+            $actingUserId = SystemSetting::getActingDirectorUserId();
+            if ($actingUserId !== null && (int) $this->id === $actingUserId) {
+                return true;
+            }
+        }
+
         return in_array($this->role, (array) $roles, true);
     }
 

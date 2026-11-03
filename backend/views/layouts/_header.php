@@ -70,7 +70,12 @@ $mainItems[] = [
 if ($isAdmin) {
     $adminItems = [
         [
-            'label' => '<i class="bi bi-people me-2 text-primary" aria-hidden="true"></i><span>จัดการผู้ใช้และบทบาท</span>',
+            'label' => '<i class="bi bi-sliders me-2 text-primary" aria-hidden="true"></i><span>ตั้งค่าระบบ</span>',
+            'url' => ['/setting/index'],
+        ],
+        '-',
+        [
+            'label' => '<i class="bi bi-people me-2 text-info" aria-hidden="true"></i><span>จัดการผู้ใช้และบทบาท</span>',
             'url' => ['/user/index'],
         ],
         [

@@ -13,6 +13,7 @@ use common\models\Document;
 use common\models\DocumentAssignment;
 use common\models\DocumentStamp;
 use common\models\Memo;
+use common\models\SystemSetting;
 use common\models\User;
 use common\models\WorkflowAction;
 use Yii;
@@ -849,22 +850,7 @@ class DocumentController extends Controller
 
     private function suggestNextReceiveNo(): string
     {
-        $buddhistYear = (int) date('Y') + 543;
-        $suffix = '/' . $buddhistYear;
-
-        $receiveNumbers = Document::find()
-            ->select('receive_no')
-            ->where(['like', 'receive_no', '%' . $suffix, false])
-            ->column();
-
-        $max = 0;
-        foreach ($receiveNumbers as $receiveNo) {
-            if (preg_match('/^(\d+)\/' . preg_quote((string) $buddhistYear, '/') . '$/', (string) $receiveNo, $matches) === 1) {
-                $max = max($max, (int) $matches[1]);
-            }
-        }
-
-        return ($max + 1) . $suffix;
+        return SystemSetting::suggestNextReceiveNo();
     }
 
     private function changeStatus(Document $model, string $toStatus, string $action, string $comment, bool $useTransaction = true): void

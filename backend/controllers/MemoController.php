@@ -11,6 +11,7 @@ use common\models\Department;
 use common\models\Memo;
 use common\models\MemoAction;
 use common\models\MemoStampPosition;
+use common\models\SystemSetting;
 use common\models\User;
 use Yii;
 use yii\data\ActiveDataProvider;
@@ -396,6 +397,13 @@ class MemoController extends Controller
 
     private function firstUserId(string $role): ?int
     {
+        if ($role === User::ROLE_DIRECTOR && SystemSetting::isActingDirector()) {
+            $actingUserId = SystemSetting::getActingDirectorUserId();
+            if ($actingUserId !== null && User::find()->where(['id' => $actingUserId, 'status' => User::STATUS_ACTIVE])->exists()) {
+                return $actingUserId;
+            }
+        }
+
         $id = User::find()->select('id')->where(['status' => User::STATUS_ACTIVE, 'role' => $role])->scalar();
 
         return $id !== false && $id !== null ? (int) $id : null;
