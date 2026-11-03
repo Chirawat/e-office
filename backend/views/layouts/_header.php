@@ -39,7 +39,7 @@ if ($isOfficer) {
     ];
 }
 $mainItems[] = [
-    'label' => '<i class="bi bi-folder2-open me-1" aria-hidden="true"></i><span>หนังสือภายนอก</span>',
+    'label' => '<i class="bi bi-folder2-open me-1" aria-hidden="true"></i><span>หนังสือเข้า</span>',
     'items' => $docItems,
     'visible' => !Yii::$app->user->isGuest,
 ];

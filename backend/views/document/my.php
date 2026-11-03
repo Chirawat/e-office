@@ -142,19 +142,19 @@ $memoStatusBadge = static function (Memo $model): string {
             <?php else: ?>
                 <button type="button" class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 py-1 px-2 d-inline-flex align-items-center gap-1 btn btn-link p-0 text-decoration-none" onclick="const t = document.querySelector('#doc-tab-btn'); if(t){ bootstrap.Tab.getOrCreateInstance(t).show(); }">
                     <i class="bi bi-inbox-fill"></i>
-                    <span>หนังสือรอทำ:</span>
+                    <span>หนังสือเข้า:</span>
                     <strong class="font-monospace"><?= Html::encode((string) $stats['doc_pending']) ?></strong>
                 </button>
                 <button type="button" class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-50 py-1 px-2 d-inline-flex align-items-center gap-1 btn btn-link p-0 text-decoration-none" onclick="const t = document.querySelector('#memo-tab-btn'); if(t){ bootstrap.Tab.getOrCreateInstance(t).show(); }">
                     <i class="bi bi-hourglass-split text-warning"></i>
-                    <span>e-Memo รอพิจารณา:</span>
+                    <span>บันทึกข้อความ:</span>
                     <strong class="font-monospace"><?= Html::encode((string) $stats['memo_active']) ?></strong>
                 </button>
             <?php endif; ?>
         </div>
     </div>
 
-    <!-- แท็บสลับการแสดงผล หนังสือภายนอก และ บันทึกข้อความ (Compact Tab Card) -->
+    <!-- แท็บสลับการแสดงผล หนังสือเข้า และ บันทึกข้อความ (Compact Tab Card) -->
     <div class="content-card border shadow-sm p-0 mb-3 bg-white overflow-hidden">
         
         <!-- Navigation Tabs Header -->
@@ -163,14 +163,14 @@ $memoStatusBadge = static function (Memo $model): string {
                 <li class="nav-item" role="presentation">
                     <button class="nav-link erp-nav-tab py-2 px-3 active fw-bold d-inline-flex align-items-center gap-2 small" id="doc-tab-btn" data-bs-toggle="tab" data-bs-target="#tab-doc" type="button" role="tab" aria-controls="tab-doc" aria-selected="true">
                         <i class="bi bi-inbox-fill text-primary"></i>
-                        <span>หนังสือภายนอก</span>
+                        <span>หนังสือเข้า</span>
                         <span class="tab-badge <?= count($docModels) > 0 ? 'bg-primary text-white' : '' ?>"><?= count($docModels) ?></span>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link erp-nav-tab py-2 px-3 fw-bold d-inline-flex align-items-center gap-2 small" id="memo-tab-btn" data-bs-toggle="tab" data-bs-target="#tab-memo" type="button" role="tab" aria-controls="tab-memo" aria-selected="false">
                         <i class="bi bi-journal-bookmark-fill text-teal" style="color: #0f766e;"></i>
-                        <span>บันทึกข้อความ (e-Memo)</span>
+                        <span>บันทึกข้อความ</span>
                         <span class="tab-badge <?= count($memoModels) > 0 ? 'bg-success text-white' : '' ?>"><?= count($memoModels) ?></span>
                     </button>
                 </li>
@@ -186,13 +186,13 @@ $memoStatusBadge = static function (Memo $model): string {
         <!-- Tab Content -->
         <div class="tab-content" id="myWorkTabsContent">
 
-            <!-- TAB 1: หนังสือภายนอก -->
+            <!-- TAB 1: หนังสือเข้า -->
             <div class="tab-pane fade show active" id="tab-doc" role="tabpanel" aria-labelledby="doc-tab-btn" tabindex="0">
                 
                 <!-- หัวบาร์ย่อยระบุสถานะและปุ่มดูทั้งหมด (Sub-bar) -->
                 <div class="py-1 px-3 bg-light bg-opacity-50 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
                     <span class="small text-muted" style="font-size: 0.82rem;">
-                        <i class="bi bi-info-circle text-primary me-1"></i>หนังสือภายนอกที่มอบหมายถึงท่าน รอดำเนินการ
+                        <i class="bi bi-info-circle text-primary me-1"></i>หนังสือเข้าที่มอบหมายถึงท่าน รอดำเนินการ
                     </span>
                     <a href="<?= Url::to(['/document/index', 'scope' => 'my']) ?>" class="small text-decoration-none" style="font-size: 0.82rem;">
                         ดูทะเบียนของฉันทั้งหมด <i class="bi bi-chevron-right"></i>
@@ -204,7 +204,7 @@ $memoStatusBadge = static function (Memo $model): string {
                     <?php if ($docModels === []): ?>
                         <div class="text-center py-5 text-muted px-3">
                             <i class="bi bi-tray fs-1 text-muted opacity-50 mb-2 d-block"></i>
-                            <div class="fw-semibold text-dark">ไม่มีหนังสือภายนอกค้างดำเนินการ</div>
+                            <div class="fw-semibold text-dark">ไม่มีหนังสือเข้าค้างดำเนินการ</div>
                             <div class="text-muted small mt-1">เมื่อมีหนังสือมอบหมายถึงท่าน จะปรากฏที่นี่</div>
                         </div>
                     <?php else: ?>
@@ -212,7 +212,7 @@ $memoStatusBadge = static function (Memo $model): string {
                             <?php foreach ($docModels as $doc): ?>
                                 <?php
                                 $viewUrl = Url::to(['view', 'id' => $doc->id]);
-                                $senderText = trim((string) $doc->sender) ?: 'หนังสือภายนอก';
+                                $senderText = trim((string) $doc->sender) ?: 'หนังสือเข้า';
                                 $initial = $getInitial($senderText);
                                 $isUrgent = in_array($doc->urgency, [Document::URGENCY_URGENT, Document::URGENCY_VERY_URGENT, Document::URGENCY_MOST_URGENT], true);
                                 ?>
@@ -271,13 +271,13 @@ $memoStatusBadge = static function (Memo $model): string {
                 <!-- ท้ายแท็บ: ทางลัดไปหน้าหนังสือทั้งหมด -->
                 <div class="py-2 px-3 border-top bg-light text-end">
                     <a href="<?= Url::to(['/document/index', 'scope' => 'all']) ?>" class="small text-decoration-none text-muted" style="font-size: 0.82rem;">
-                        <i class="bi bi-globe2 me-1"></i> ทะเบียนหนังสือภายนอกทั้งหมด <i class="bi bi-chevron-right"></i>
+                        <i class="bi bi-globe2 me-1"></i> ทะเบียนหนังสือเข้าทั้งหมด <i class="bi bi-chevron-right"></i>
                     </a>
                 </div>
 
             </div>
 
-            <!-- TAB 2: บันทึกข้อความ (e-Memo) -->
+            <!-- TAB 2: บันทึกข้อความ -->
             <div class="tab-pane fade" id="tab-memo" role="tabpanel" aria-labelledby="memo-tab-btn" tabindex="0">
                 
                 <!-- หัวบาร์ย่อยระบุสถานะและปุ่มสร้าง/ดูทั้งหมด (Sub-bar) -->
