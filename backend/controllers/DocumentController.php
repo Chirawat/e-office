@@ -60,7 +60,31 @@ class DocumentController extends Controller
             ->with(['department', 'originalFile'])
             ->orderBy(['{{%document}}.[[id]]' => SORT_DESC]);
         $keyword = trim((string) Yii::$app->request->get('q', ''));
+        $scope = (string) Yii::$app->request->get('scope', 'all');
         $identity = Yii::$app->user->identity;
+
+        $countAll = 0;
+        $countMy = 0;
+        $myAssignedDocIds = [];
+
+        if ($identity instanceof User) {
+            // ดึง ID หนังสือที่มอบหมายถึงตนเองหรือกลุ่มงานของตนเอง
+            $myIdsQuery = Document::find()->select('{{%document}}.[[id]]');
+            $this->applyStaffAssignmentScope($myIdsQuery, $identity);
+            $myAssignedDocIds = array_map('intval', $myIdsQuery->column());
+
+            if ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
+                // คำนวณจำนวนหนังสือภายนอกทั้งหมดที่เผยแพร่แล้ว (ไม่รวมชั้นความลับ)
+                $countAll = (int) Document::find()
+                    ->where(['{{%document}}.[[status]]' => [Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]])
+                    ->andWhere(['{{%document}}.[[confidentiality]]' => 'normal'])
+                    ->count();
+
+                // คำนวณจำนวนหนังสือที่มอบหมายถึงตนเอง
+                $countMy = count($myAssignedDocIds);
+            }
+        }
+
         if ($identity instanceof User && !$identity->hasRole(User::ROLE_ADMIN)) {
             if ($identity->hasRole(User::ROLE_DEPUTY_DIRECTOR)) {
                 $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DEPUTY, Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_RETURNED]]);
@@ -68,14 +92,21 @@ class DocumentController extends Controller
                 $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
             } elseif ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
                 $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
-                $this->applyStaffAssignmentScope($query, $identity);
+                if ($scope === 'my') {
+                    $this->applyStaffAssignmentScope($query, $identity);
+                } else {
+                    // โหมดดูทั้งหมด: ซ่อนเอกสารชั้นความลับ
+                    $query->andWhere(['{{%document}}.[[confidentiality]]' => 'normal']);
+                }
             }
         }
+
         if ($keyword !== '') {
             $query->andWhere([
                 'or',
                 ['like', '{{%document}}.[[subject]]', $keyword],
                 ['like', '{{%document}}.[[external_no]]', $keyword],
+                ['like', '{{%document}}.[[receive_no]]', $keyword],
             ]);
         }
 
@@ -87,6 +118,10 @@ class DocumentController extends Controller
         return $this->render('index', [
             'dataProvider' => $dataProvider,
             'keyword' => $keyword,
+            'scope' => $scope,
+            'countAll' => $countAll,
+            'countMy' => $countMy,
+            'myAssignedDocIds' => $myAssignedDocIds,
         ]);
     }
 
@@ -100,68 +135,94 @@ class DocumentController extends Controller
         $statuses = $this->myWorkStatuses($identity);
         $keyword = trim((string) Yii::$app->request->get('q_doc', Yii::$app->request->get('q', '')));
         $memoKeyword = trim((string) Yii::$app->request->get('q_memo', ''));
-        $showMemoWorkbench = $identity->hasRole([User::ROLE_STAFF, User::ROLE_DEPUTY_DIRECTOR, User::ROLE_DIRECTOR]);
-        $activeTab = (string) Yii::$app->request->get('tab', 'document');
-        if (!$showMemoWorkbench || $activeTab !== 'memo') {
-            $activeTab = 'document';
-        }
-        $query = Document::find()
+        $showMemoWorkbench = true; // เปิดให้ทุกบทบาท (รวมคุณครู/บุคลากรทั่วไป) เข้าถึงบันทึกข้อความของตนเองได้
+
+        // 1. ดึงข้อมูลหนังสือภายนอกที่เกี่ยวข้องกับตนเอง
+        $docQuery = Document::find()
             ->with(['department', 'originalFile'])
             ->where(['{{%document}}.[[status]]' => $statuses])
             ->orderBy(['{{%document}}.[[updated_at]]' => SORT_DESC, '{{%document}}.[[id]]' => SORT_DESC]);
+
         if ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
-            $this->applyStaffAssignmentScope($query, $identity);
+            $this->applyStaffAssignmentScope($docQuery, $identity);
         }
+
         if ($keyword !== '') {
-            $query->andWhere([
+            $docQuery->andWhere([
                 'or',
                 ['like', '{{%document}}.[[subject]]', $keyword],
                 ['like', '{{%document}}.[[external_no]]', $keyword],
+                ['like', '{{%document}}.[[receive_no]]', $keyword],
             ]);
         }
 
-        $dataProvider = new ActiveDataProvider([
-            'query' => $query,
-            'pagination' => ['pageSize' => 20],
+        $docDataProvider = new ActiveDataProvider([
+            'query' => $docQuery,
+            'pagination' => [
+                'pageSize' => 15,
+                'pageParam' => 'doc-page',
+                'pageSizeParam' => 'doc-per-page',
+            ],
         ]);
 
-        $memoDataProvider = null;
-        $memoTotal = 0;
-        if ($showMemoWorkbench) {
-            $memoQuery = Memo::find()
-                ->with(['department', 'creator', 'currentActor'])
-                ->orderBy(['updated_at' => SORT_DESC, 'id' => SORT_DESC]);
-            $this->applyMemoWorkbenchScope($memoQuery, $identity);
-            if ($memoKeyword !== '') {
-                $memoQuery->andWhere([
-                    'or',
-                    ['like', 'subject', $memoKeyword],
-                    ['like', 'memo_no', $memoKeyword],
-                ]);
-            }
+        // 2. ดึงข้อมูลบันทึกข้อความ (e-Memo) ที่เกี่ยวข้องกับตนเอง
+        $memoQuery = Memo::find()
+            ->with(['department', 'creator', 'currentActor'])
+            ->orderBy(['updated_at' => SORT_DESC, 'id' => SORT_DESC]);
+        $this->applyMemoWorkbenchScope($memoQuery, $identity);
 
-            $memoDataProvider = new ActiveDataProvider([
-                'query' => $memoQuery,
-                'pagination' => [
-                    'pageSize' => 20,
-                    'pageParam' => 'memo-page',
-                    'pageSizeParam' => 'memo-per-page',
-                ],
+        if ($memoKeyword !== '') {
+            $memoQuery->andWhere([
+                'or',
+                ['like', 'subject', $memoKeyword],
+                ['like', 'memo_no', $memoKeyword],
             ]);
-            $memoTotal = $memoDataProvider->getTotalCount();
         }
 
+        $memoDataProvider = new ActiveDataProvider([
+            'query' => $memoQuery,
+            'pagination' => [
+                'pageSize' => 15,
+                'pageParam' => 'memo-page',
+                'pageSizeParam' => 'memo-per-page',
+            ],
+        ]);
+
+        // 3. สรุปสถิติสำหรับแถบ Badges บน Workbench Dashboard
+        $myAssignedDocCount = $docDataProvider->getTotalCount();
+        
+        // จำนวนหนังสือที่เสร็จสิ้นแล้วของตนเอง
+        $completedDocQuery = Document::find()->select('{{%document}}.[[id]]')->where(['{{%document}}.[[status]]' => Document::STATUS_COMPLETED]);
+        if ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
+            $this->applyStaffAssignmentScope($completedDocQuery, $identity);
+        }
+        $myCompletedDocCount = count($completedDocQuery->column());
+
+        // สถิติบันทึกข้อความ
+        $myPendingMemosCount = (int) Memo::find()
+            ->where(['current_actor_id' => $identity->id])
+            ->andWhere(['not in', 'status', [Memo::STATUS_COMPLETED, Memo::STATUS_APPROVED]])
+            ->count();
+
+        $myCreatedMemosCount = (int) Memo::find()
+            ->where(['created_by' => $identity->id])
+            ->count();
+
+        $stats = [
+            'doc_pending' => $myAssignedDocCount,
+            'doc_completed' => $myCompletedDocCount,
+            'memo_pending' => $myPendingMemosCount,
+            'memo_total' => $myCreatedMemosCount,
+        ];
+
         return $this->render('my', [
-            'dataProvider' => $dataProvider,
-            'statuses' => $statuses,
-            'roleLabel' => $identity->roleLabel(),
-            'summary' => $this->myWorkSummary($statuses, $identity),
-            'keyword' => $keyword,
+            'identity' => $identity,
+            'docDataProvider' => $docDataProvider,
             'memoDataProvider' => $memoDataProvider,
+            'stats' => $stats,
+            'keyword' => $keyword,
             'memoKeyword' => $memoKeyword,
-            'memoTotal' => $memoTotal,
-            'showMemoWorkbench' => $showMemoWorkbench,
-            'activeTab' => $activeTab,
+            'roleLabel' => $identity->roleLabel(),
         ]);
     }
 
@@ -670,15 +731,26 @@ class DocumentController extends Controller
             return false;
         }
 
-        if ($identity->role === User::ROLE_GENERAL_USER) {
-            return $this->canCurrentUserCompleteAssignment($model);
+        // กรณีมอบหมายตรงถึงตนเอง
+        if ($this->canCurrentUserCompleteAssignment($model)) {
+            return true;
         }
 
+        // กรณีมอบหมายถึงกลุ่มงานของตนเอง
         $assignment = $this->latestAssignment($model);
-        return $assignment !== null
+        if ($assignment !== null
             && $identity->department_id !== null
             && $assignment->department_id !== null
-            && (int) $assignment->department_id === (int) $identity->department_id;
+            && (int) $assignment->department_id === (int) $identity->department_id) {
+            return true;
+        }
+
+        // กรณีหนังสือภายนอกทั่วไป (ชั้นความลับปกติ) ที่อยู่ในสถานะเผยแพร่/สั่งการแล้ว อนุญาตให้บุคลากรทุกคนเปิดดูได้
+        if ($model->confidentiality === 'normal' && in_array($model->status, [Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED], true)) {
+            return true;
+        }
+
+        return false;
     }
 
     private function regenerateStampedPdf(Document $model, bool $flashWarning = true): void
