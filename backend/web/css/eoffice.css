@@ -2093,26 +2093,38 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
 }
 
 /* Mobile PDF Viewer Optimization */
+@media (max-width: 991.98px) {
+    .document-workspace {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        width: 100% !important;
+        gap: 16px !important;
+    }
+    .document-workspace > * {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+}
+
 @media (max-width: 767.98px) {
     .eoffice-main {
         padding: 10px 0 24px;
     }
     .eoffice-container {
-        padding-left: 8px;
-        padding-right: 8px;
-    }
-    .document-workspace {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
+        padding-left: 6px;
+        padding-right: 6px;
     }
     .pdf-card-section {
+        width: 100% !important;
+        max-width: 100% !important;
         border-radius: 8px;
         margin-bottom: 0;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
     }
     .pdf-canvas-wrapper {
         padding: 0 !important;
+        width: 100% !important;
         background: #334155 !important;
     }
     .pdf-viewer-controls {
@@ -2121,6 +2133,46 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
     }
     .pdf-viewer-header {
         padding: 8px 10px !important;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .eoffice-container {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    .pdf-card-section {
+        border-radius: 0 !important;
+        border-left: 0 !important;
+        border-right: 0 !important;
+    }
+    .pdf-preview-frame {
+        border-radius: 0 !important;
+        border-left: 0 !important;
+        border-right: 0 !important;
+    }
+    .pdf-canvas-wrapper {
+        padding: 0 !important;
+        width: 100% !important;
+        min-height: 380px !important;
+    }
+    .pdf-preview-canvas {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 auto !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+    #pdf-main-canvas {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: 0 !important;
+    }
+    .side-stack {
+        padding-left: 8px !important;
+        padding-right: 8px !important;
     }
 }
 

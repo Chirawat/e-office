@@ -16,6 +16,79 @@ $this->title = 'บันทึกเสนอ: ' . $model->subject;
 $this->params['breadcrumbs'][] = ['label' => 'บันทึกเสนอ', 'url' => ['index']];
 $this->params['breadcrumbs'][] = 'รายละเอียด';
 $this->registerCssFile('@web/css/eoffice.css', ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
+
+$this->registerCss('
+/* ป้องกันการล้นจอแนวนอนและขยายมุมมอง PDF ให้เต็มความกว้างของจอมือถือ */
+html, body, .eoffice-body, main, .eoffice-main, .eoffice-container, .eoffice-page {
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+}
+
+@media (max-width: 991.98px) {
+    .document-workspace {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        width: 100% !important;
+        gap: 16px !important;
+    }
+    .document-workspace > * {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    .pdf-card-section {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .eoffice-container {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    .document-workspace {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .pdf-card-section {
+        border-radius: 0 !important;
+        border-left: 0 !important;
+        border-right: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    .pdf-preview-frame {
+        border-radius: 0 !important;
+        border-left: 0 !important;
+        border-right: 0 !important;
+    }
+    .pdf-canvas-wrapper {
+        padding: 0 !important;
+        width: 100% !important;
+        background: #334155 !important;
+    }
+    .pdf-preview-canvas {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 auto !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+    #pdf-main-canvas {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: 0 !important;
+    }
+    .side-stack {
+        padding-left: 8px !important;
+        padding-right: 8px !important;
+    }
+}
+');
 $identity = Yii::$app->user->identity;
 $statusLabel = Memo::statusOptions()[$model->status] ?? $model->status;
 $statusClass = 'status-badge-' . str_replace('_', '-', $model->status);
@@ -405,21 +478,59 @@ $this->registerJs(<<<'JS'
         try {
             const page = await pdfDoc.getPage(num);
             const wrapper = document.getElementById('pdf-canvas-wrapper');
-            const availableWidth = Math.max((wrapper ? wrapper.clientWidth : 800) - 32, 280);
+            let availableWidth = (wrapper && wrapper.clientWidth > 100)
+                ? wrapper.clientWidth
+                : (window.innerWidth || document.documentElement.clientWidth || 360);
+
+            if (window.innerWidth >= 576) {
+                availableWidth = Math.max(availableWidth - 16, 280);
+            }
             const unscaledViewport = page.getViewport({ scale: 1 });
             
             fitScale = availableWidth / unscaledViewport.width;
             const effectiveScale = currentScale * fitScale;
-            const viewport = page.getViewport({ scale: effectiveScale });
 
-            const dpr = window.devicePixelRatio || 1;
-            mainCanvas.width = Math.floor(viewport.width * dpr);
-            mainCanvas.height = Math.floor(viewport.height * dpr);
-            mainCanvas.style.width = Math.floor(viewport.width) + 'px';
-            mainCanvas.style.height = Math.floor(viewport.height) + 'px';
+            const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 2), 3);
+            const viewport = page.getViewport({ scale: effectiveScale * dpr });
 
-            ctx.save();
-            ctx.scale(dpr, dpr);
+            mainCanvas.width = Math.floor(viewport.width);
+            mainCanvas.height = Math.floor(viewport.height);
+            const cssWidth = Math.floor(viewport.width / dpr);
+            const cssHeight = Math.floor(viewport.height / dpr);
+
+            if (currentScale > 1.0) {
+                mainCanvas.style.width = cssWidth + 'px';
+                mainCanvas.style.height = cssHeight + 'px';
+                mainCanvas.style.maxWidth = 'none';
+                if (canvasContainer) {
+                    canvasContainer.style.width = cssWidth + 'px';
+                    canvasContainer.style.height = cssHeight + 'px';
+                    canvasContainer.style.maxWidth = 'none';
+                }
+            } else {
+                if (window.innerWidth < 576) {
+                    mainCanvas.style.width = '100%';
+                    mainCanvas.style.height = 'auto';
+                    mainCanvas.style.maxWidth = '100%';
+                    if (canvasContainer) {
+                        canvasContainer.style.width = '100%';
+                        canvasContainer.style.height = 'auto';
+                        canvasContainer.style.maxWidth = '100%';
+                    }
+                } else {
+                    mainCanvas.style.width = cssWidth + 'px';
+                    mainCanvas.style.height = cssHeight + 'px';
+                    mainCanvas.style.maxWidth = '100%';
+                    if (canvasContainer) {
+                        canvasContainer.style.width = cssWidth + 'px';
+                        canvasContainer.style.height = cssHeight + 'px';
+                        canvasContainer.style.maxWidth = '100%';
+                    }
+                }
+            }
+
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
 
             const renderContext = {
                 canvasContext: ctx,
@@ -427,7 +538,6 @@ $this->registerJs(<<<'JS'
             };
 
             await page.render(renderContext).promise;
-            ctx.restore();
 
             pageHeight = pageWidth * (unscaledViewport.height / unscaledViewport.width);
             document.querySelectorAll('[data-axis="y"]').forEach((input) => {
@@ -526,7 +636,9 @@ $this->registerJs(<<<'JS'
             pdfDoc = await window.pdfjsLib.getDocument(pdfUrl).promise;
             totalPages = pdfDoc.numPages;
             if (totalPagesDisplay) totalPagesDisplay.textContent = totalPages;
-            renderPage(1);
+            requestAnimationFrame(() => {
+                renderPage(1);
+            });
         } catch (err) {
             console.error('Error loading PDF:', err);
             if (loadingIndicator) loadingIndicator.classList.add('d-none');
