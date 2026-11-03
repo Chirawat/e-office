@@ -106,7 +106,7 @@ $hasLineLinked = !empty($model->line_user_id);
                         <?php if ($hasLineLinked): ?>
                             <span class="badge bg-success px-3 py-2"><i class="bi bi-check-circle-fill me-1"></i> เชื่อมต่อแล้ว</span>
                         <?php else: ?>
-                            <a href="<?= Url::to(['/site/line-auth']) ?>" class="btn text-white fw-bold px-3 py-2 rounded-3 shadow-sm" style="background-color: #06C755; border: none;">
+                            <a href="<?= Url::to(['/site/line-auth', 'from' => 'signup']) ?>" class="btn text-white fw-bold px-3 py-2 rounded-3 shadow-sm" style="background-color: #06C755; border: none;">
                                 <i class="bi bi-link-45deg me-1"></i> กดเชื่อมต่อ LINE ที่นี่
                             </a>
                         <?php endif; ?>

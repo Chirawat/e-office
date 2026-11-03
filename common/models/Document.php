@@ -59,7 +59,7 @@ class Document extends ActiveRecord
     public function rules(): array
     {
         return [
-            [['receive_no', 'receive_date', 'sender', 'subject'], 'required'],
+            [['receive_no', 'receive_date', 'sender', 'subject', 'department_id'], 'required'],
             [['receive_date', 'receive_time', 'external_date', 'due_date'], 'safe'],
             [['department_id'], 'integer'],
             [['note'], 'string'],

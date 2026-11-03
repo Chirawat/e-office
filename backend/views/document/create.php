@@ -11,6 +11,11 @@ use yii\helpers\Html;
 /** @var yii\web\View $this */
 /** @var backend\models\DocumentForm $form */
 /** @var Department[] $departments */
+/** @var bool $isActingDirector */
+/** @var string $effectiveDirectorName */
+/** @var string $effectiveDirectorPosition */
+/** @var array<int, string|null> $deputyByDept */
+/** @var string[] $allDeputyNames */
 
 $this->title = 'ลงทะเบียนหนังสือรับ';
 $this->params['breadcrumbs'][] = ['label' => 'หนังสือรับ', 'url' => ['index']];
@@ -68,6 +73,7 @@ $thaiTime = static function (?string $time): string {
     </div>
 
     <?php $activeForm = ActiveForm::begin(['options' => ['enctype' => 'multipart/form-data']]); ?>
+    <?= $activeForm->errorSummary([$form, $form->document], ['class' => 'alert alert-danger mb-3', 'header' => '<h5 class="alert-heading mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i> พบข้อผิดพลาดในการลงทะเบียนเอกสาร</h5>']) ?>
     <div class="form-grid">
         <div class="content-card">
             <div class="row">
@@ -99,7 +105,9 @@ $thaiTime = static function (?string $time): string {
                     <?= $activeForm->field($form->document, 'urgency')->dropDownList(Document::urgencyOptions()) ?>
                 </div>
                 <div class="col-md-4">
-                    <?= $activeForm->field($form->document, 'department_id')->dropDownList($departmentItems, ['prompt' => 'เลือกกลุ่มงาน']) ?>
+                    <?= $activeForm->field($form->document, 'department_id')
+                        ->dropDownList($departmentItems, ['prompt' => 'เลือกกลุ่มงาน (กำหนดสายบังคับบัญชา)'])
+                        ->hint('สายการเสนอเอกสารจะวิ่งไปหารอง ผอ. ประจำกลุ่มงานนี้โดยอัตโนมัติ') ?>
                 </div>
                 <div class="col-md-4">
                     <?= $activeForm->field($form->document, 'due_date')->input('date') ?>
@@ -137,22 +145,109 @@ $thaiTime = static function (?string $time): string {
 
             <div class="form-actions">
                 <?= Html::a('ยกเลิก', ['index'], ['class' => 'btn btn-outline-secondary']) ?>
-                <?= Html::submitButton('บันทึกและดูตราประทับ', ['class' => 'btn btn-primary']) ?>
+                <?= Html::submitButton('<i class="bi bi-cloud-arrow-up-fill me-1"></i> <span>บันทึกและดูตราประทับ</span>', [
+                    'class' => 'btn btn-primary',
+                    'id' => 'btn-submit-doc',
+                ]) ?>
             </div>
         </div>
 
         <aside class="stamp-card">
-            <h2>ตัวอย่างตรารับ</h2>
-            <div class="receive-stamp">
+            <h2 class="h6 fw-bold mb-2 text-dark"><i class="bi bi-stamp text-danger me-1"></i> ตัวอย่างตรารับ</h2>
+            <div class="receive-stamp mb-3">
                 <strong>โรงเรียนกุดชุมวิทยาคม</strong>
                 <span>รับที่ <em data-stamp-preview="receive-no"><?= Html::encode($form->document->receive_no ?: '-') ?></em></span>
                 <span>วันที่ <em data-stamp-preview="receive-date"><?= Html::encode($thaiDate($form->document->receive_date)) ?></em></span>
                 <span>เวลา <em data-stamp-preview="receive-time"><?= Html::encode($thaiTime($form->document->receive_time)) ?></em></span>
             </div>
-            <p>ระบบจะเก็บ PDF ต้นฉบับไว้ และสร้างข้อมูลตราประทับสำหรับนำไปวางบน PDF ในขั้นตอนถัดไป</p>
+
+            <!-- กล่อง Preview ผู้ลงนามตามสายงาน (Signers Preview) -->
+            <div class="p-3 bg-white border rounded-3 shadow-sm mb-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="fw-bold small text-dark d-flex align-items-center gap-1">
+                        <i class="bi bi-diagram-3-fill text-primary"></i>
+                        <span>สายบังคับบัญชาและผู้ลงนาม</span>
+                    </span>
+                    <span class="badge bg-light text-muted border fw-normal" style="font-size: 0.65rem;">Flow เอกสาร</span>
+                </div>
+
+                <!-- 1. ผู้ลงรับหนังสือ (สารบรรณ) -->
+                <div class="p-2 bg-light border rounded-2 mb-2">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="fw-semibold text-secondary d-flex align-items-center gap-1" style="font-size: 0.8rem;">
+                            <i class="bi bi-1-circle-fill text-secondary"></i> สารบรรณ / ผู้ลงรับ
+                        </span>
+                        <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle" style="font-size: 0.65rem;">ลงรับระบบ</span>
+                    </div>
+                    <div class="fw-bold text-dark small">
+                        <?= Html::encode(Yii::$app->user->identity->name ?? 'เจ้าหน้าที่สารบรรณ') ?>
+                    </div>
+                    <div class="text-muted" style="font-size: 0.72rem;">
+                        เจ้าหน้าที่ผู้ลงทะเบียนรับหนังสือ
+                    </div>
+                </div>
+
+                <!-- 2. รองผู้อำนวยการ -->
+                <div class="p-2 bg-light border rounded-2 mb-2">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="fw-semibold text-primary d-flex align-items-center gap-1" style="font-size: 0.8rem;">
+                            <i class="bi bi-2-circle-fill text-primary"></i> รองผู้อำนวยการ
+                        </span>
+                        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" style="font-size: 0.65rem;">ลงความเห็น</span>
+                    </div>
+                    <div class="fw-bold text-dark small" id="preview-deputy-name">
+                        <?= Html::encode($allDeputyNames !== [] ? implode(', ', $allDeputyNames) : '(ยังไม่มีผู้ใช้บทบาท รอง ผอ. ในระบบ)') ?>
+                    </div>
+                    <div class="text-muted" style="font-size: 0.72rem;" id="preview-deputy-dept">
+                        (เลือกกลุ่มงานด้านซ้ายเพื่อระบุ รอง ผอ.)
+                    </div>
+                </div>
+
+                <!-- 3. ผู้อำนวยการ หรือ ผู้รักษาการแทน -->
+                <div class="p-2 rounded-2 <?= $isActingDirector ? 'bg-warning-subtle border border-warning' : 'bg-light border' ?>">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="fw-semibold <?= $isActingDirector ? 'text-warning-emphasis' : 'text-primary' ?> d-flex align-items-center gap-1" style="font-size: 0.8rem;">
+                            <i class="bi bi-3-circle-fill <?= $isActingDirector ? 'text-warning-emphasis' : 'text-primary' ?>"></i> <?= $isActingDirector ? 'ผู้รักษาการแทน ผอ.' : 'ผู้อำนวยการโรงเรียน' ?>
+                        </span>
+                        <span class="badge <?= $isActingDirector ? 'bg-warning text-dark' : 'bg-success-subtle text-success border border-success-subtle' ?>" style="font-size: 0.65rem;">
+                            <?= $isActingDirector ? 'รักษาการแทน' : 'สั่งการขั้นสุดท้าย' ?>
+                        </span>
+                    </div>
+                    <div class="fw-bold text-dark small">
+                        <?= Html::encode($effectiveDirectorName ?: '(ยังไม่ได้ระบุชื่อในการตั้งค่าระบบ)') ?>
+                    </div>
+                    <div class="text-muted" style="font-size: 0.72rem;">
+                        <?= Html::encode($effectiveDirectorPosition) ?>
+                    </div>
+                    <?php if ($isActingDirector): ?>
+                        <div class="mt-1 pt-1 border-top border-warning-subtle text-warning-emphasis fw-semibold" style="font-size: 0.7rem;">
+                            <i class="bi bi-exclamation-circle-fill me-1"></i> ปัจจุบันใช้ชื่อรักษาการแทน ผอ.
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <div class="mt-2 pt-2 border-top text-center">
+                    <?php if (Yii::$app->user->identity instanceof \common\models\User && Yii::$app->user->identity->hasRole(\common\models\User::ROLE_ADMIN)): ?>
+                        <?= Html::a('<i class="bi bi-gear-fill me-1"></i> ตรวจสอบการตั้งค่าระบบ', ['/setting/index'], [
+                            'class' => 'btn btn-sm btn-outline-secondary py-0 px-2',
+                            'style' => 'font-size: 0.72rem;',
+                            'target' => '_blank',
+                        ]) ?>
+                    <?php else: ?>
+                        <span class="text-muted" style="font-size: 0.7rem;">
+                            <i class="bi bi-shield-lock me-1"></i> ข้อมูลผู้ลงนามอ้างอิงจากการตั้งค่าระบบ
+                        </span>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <p class="small text-muted mb-0">ระบบจะเก็บ PDF ต้นฉบับไว้ และสร้างข้อมูลตราประทับสำหรับนำไปวางบน PDF ในขั้นตอนถัดไป</p>
         </aside>
     </div>
     <?php ActiveForm::end(); ?>
+
+    <script type="application/json" id="deputy-dept-json"><?= json_encode($deputyByDept, JSON_UNESCAPED_UNICODE) ?></script>
+    <script type="application/json" id="default-deputy-json"><?= json_encode($allDeputyNames !== [] ? implode(', ', $allDeputyNames) : '(ยังไม่มีผู้ใช้บทบาท รอง ผอ. ในระบบ)', JSON_UNESCAPED_UNICODE) ?></script>
 </div>
 
 <?php
@@ -164,7 +259,25 @@ $this->registerJs(<<<'JS'
     const receiveNoOutput = document.querySelector('[data-stamp-preview="receive-no"]');
     const receiveDateOutput = document.querySelector('[data-stamp-preview="receive-date"]');
     const receiveTimeOutput = document.querySelector('[data-stamp-preview="receive-time"]');
+    const departmentInput = document.getElementById('document-department_id');
+    const deputyNameOutput = document.getElementById('preview-deputy-name');
+    const deputyDeptOutput = document.getElementById('preview-deputy-dept');
     const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+
+    let deputyByDeptMap = {};
+    let defaultDeputyText = '(ยังไม่มีผู้ใช้บทบาท รอง ผอ. ในระบบ)';
+    try {
+        const jsonEl = document.getElementById('deputy-dept-json');
+        if (jsonEl && jsonEl.textContent) {
+            deputyByDeptMap = JSON.parse(jsonEl.textContent);
+        }
+        const defaultEl = document.getElementById('default-deputy-json');
+        if (defaultEl && defaultEl.textContent) {
+            defaultDeputyText = JSON.parse(defaultEl.textContent);
+        }
+    } catch (e) {
+        console.error('Error parsing deputy JSON', e);
+    }
 
     function formatThaiDate(value) {
         if (!value) {
@@ -204,6 +317,27 @@ $this->registerJs(<<<'JS'
         }
     }
 
+    function refreshDeputyPreview() {
+        if (!deputyNameOutput) return;
+        const deptId = departmentInput ? departmentInput.value : '';
+        if (deptId && deputyByDeptMap[deptId]) {
+            deputyNameOutput.textContent = deputyByDeptMap[deptId];
+            if (deputyDeptOutput && departmentInput.selectedIndex > 0) {
+                deputyDeptOutput.textContent = 'ประจำกลุ่มงาน' + departmentInput.options[departmentInput.selectedIndex].text;
+            }
+        } else if (deptId) {
+            deputyNameOutput.textContent = defaultDeputyText;
+            if (deputyDeptOutput && departmentInput.selectedIndex > 0) {
+                deputyDeptOutput.textContent = 'กำกับดูแลกลุ่มงาน' + departmentInput.options[departmentInput.selectedIndex].text;
+            }
+        } else {
+            deputyNameOutput.textContent = defaultDeputyText;
+            if (deputyDeptOutput) {
+                deputyDeptOutput.textContent = '(เลือกกลุ่มงานด้านซ้ายเพื่อระบุ รอง ผอ.)';
+            }
+        }
+    }
+
     [receiveNoInput, receiveDateInput, receiveTimeInput].forEach((input) => {
         if (input) {
             input.addEventListener('input', refreshStampPreview);
@@ -211,7 +345,23 @@ $this->registerJs(<<<'JS'
         }
     });
 
+    if (departmentInput) {
+        departmentInput.addEventListener('change', refreshDeputyPreview);
+    }
+
+    const formEl = document.getElementById('w0');
+    const submitBtn = document.getElementById('btn-submit-doc');
+    if (formEl && submitBtn) {
+        formEl.addEventListener('submit', function () {
+            setTimeout(function () {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> กำลังอัปโหลดและประมวลผล PDF...';
+            }, 10);
+        });
+    }
+
     refreshStampPreview();
+    refreshDeputyPreview();
 })();
 JS);
 ?>

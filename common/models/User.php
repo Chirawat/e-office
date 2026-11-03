@@ -174,7 +174,15 @@ class User extends ActiveRecord implements IdentityInterface
 
     public function roleLabel(): string
     {
-        return self::roleOptions()[$this->role] ?? $this->role;
+        $base = self::roleOptions()[$this->role] ?? $this->role;
+        if ($this->role === self::ROLE_DEPUTY_DIRECTOR && $this->department !== null) {
+            return $base . ' (' . $this->department->name . ')';
+        }
+        if ($this->role === self::ROLE_STAFF && $this->department !== null) {
+            return $base . ' (' . $this->department->name . ')';
+        }
+
+        return $base;
     }
 
     public function hasRole(string|array $roles): bool
@@ -204,9 +212,27 @@ class User extends ActiveRecord implements IdentityInterface
         return $this->hasRole([self::ROLE_OFFICER]);
     }
 
-    public function canGiveDeputyComment(): bool
+    public function canGiveDeputyComment(?int $departmentId = null): bool
     {
-        return $this->hasRole([self::ROLE_DEPUTY_DIRECTOR]);
+        if (!$this->hasRole([self::ROLE_DEPUTY_DIRECTOR])) {
+            return false;
+        }
+
+        if ($this->hasRole(self::ROLE_ADMIN)) {
+            return true;
+        }
+
+        // ผู้รักษาการแทน ผอ. มีสิทธิ์กำกับดูแลทุกกลุ่มงาน
+        if (SystemSetting::isActingDirector() && (int) $this->id === (int) SystemSetting::getActingDirectorUserId()) {
+            return true;
+        }
+
+        // หากเอกสารไม่ได้ระบุกลุ่มงาน ถือว่ารอง ผอ. สามารถตรวจทานได้
+        if ($departmentId === null) {
+            return true;
+        }
+
+        return $this->belongsToDepartment($departmentId);
     }
 
     public function canGiveDirectorOrder(): bool

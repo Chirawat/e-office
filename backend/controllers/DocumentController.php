@@ -89,6 +89,13 @@ class DocumentController extends Controller
         if ($identity instanceof User && !$identity->hasRole(User::ROLE_ADMIN)) {
             if ($identity->hasRole(User::ROLE_DEPUTY_DIRECTOR)) {
                 $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DEPUTY, Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_RETURNED]]);
+                $isActing = SystemSetting::isActingDirector() && (int) $identity->id === SystemSetting::getActingDirectorUserId();
+                if (!$isActing && $identity->role === User::ROLE_DEPUTY_DIRECTOR) {
+                    $myDepts = $identity->departmentIds();
+                    if ($myDepts !== []) {
+                        $query->andWhere(['{{%document}}.[[department_id]]' => $myDepts]);
+                    }
+                }
             } elseif ($identity->hasRole(User::ROLE_DIRECTOR)) {
                 $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
             } elseif ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
@@ -146,6 +153,11 @@ class DocumentController extends Controller
 
         if ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
             $this->applyStaffAssignmentScope($docQuery, $identity);
+        } elseif ($identity->role === User::ROLE_DEPUTY_DIRECTOR && !(SystemSetting::isActingDirector() && (int)$identity->id === (int)SystemSetting::getActingDirectorUserId())) {
+            $deptIds = $identity->departmentIds();
+            if (!empty($deptIds)) {
+                $docQuery->andWhere(['or', ['{{%document}}.[[department_id]]' => $deptIds], ['{{%document}}.[[department_id]]' => null]]);
+            }
         }
 
         if ($keyword !== '') {
@@ -232,11 +244,43 @@ class DocumentController extends Controller
                 Yii::$app->session->setFlash('success', 'ลงทะเบียนหนังสือรับเรียบร้อยแล้ว');
                 return $this->redirect(['view', 'id' => $document->id]);
             }
+            Yii::$app->session->setFlash('error', 'ไม่สามารถลงทะเบียนเอกสารได้ กรุณาตรวจสอบข้อมูลที่กรอกให้ถูกต้อง');
         }
+
+        $departments = Department::find()->where(['is_active' => true])->orderBy(['sort_order' => SORT_ASC])->all();
+
+        // ข้อมูลผู้ลงนาม: ผู้อำนวยการ / ผู้รักษาการแทน
+        $isActingDirector = SystemSetting::isActingDirector();
+        $effectiveDirectorName = SystemSetting::getCurrentDirectorName();
+        $effectiveDirectorPosition = SystemSetting::getCurrentDirectorPosition();
+
+        // ข้อมูลผู้ลงนาม: รองผู้อำนวยการประจำกลุ่มงาน
+        $deputyUsers = User::find()
+            ->where(['role' => User::ROLE_DEPUTY_DIRECTOR, 'status' => User::STATUS_ACTIVE])
+            ->with(['department', 'departments'])
+            ->all();
+
+        $deputyByDept = [];
+        foreach ($departments as $dept) {
+            $assignedDeputies = [];
+            foreach ($deputyUsers as $deputy) {
+                if ($deputy->belongsToDepartment($dept->id)) {
+                    $assignedDeputies[] = $deputy->displayName();
+                }
+            }
+            $deputyByDept[$dept->id] = $assignedDeputies !== [] ? implode(', ', $assignedDeputies) : null;
+        }
+
+        $allDeputyNames = array_map(static fn (User $u): string => $u->displayName(), $deputyUsers);
 
         return $this->render('create', [
             'form' => $form,
-            'departments' => Department::find()->where(['is_active' => true])->orderBy(['sort_order' => SORT_ASC])->all(),
+            'departments' => $departments,
+            'isActingDirector' => $isActingDirector,
+            'effectiveDirectorName' => $effectiveDirectorName,
+            'effectiveDirectorPosition' => $effectiveDirectorPosition,
+            'deputyByDept' => $deputyByDept,
+            'allDeputyNames' => $allDeputyNames,
         ]);
     }
 
@@ -302,6 +346,11 @@ class DocumentController extends Controller
         if ($model->status !== Document::STATUS_SUBMITTED_TO_DEPUTY) {
             Yii::$app->session->setFlash('warning', 'หนังสือไม่ได้อยู่ในสถานะรอรอง ผอ.');
             return $this->redirect(['view', 'id' => $model->id]);
+        }
+
+        $identity = Yii::$app->user->identity;
+        if ($identity instanceof User && !$identity->canGiveDeputyComment($model->department_id)) {
+            throw new ForbiddenHttpException('ท่านไม่มีสิทธิ์ลงความเห็นในเอกสารนี้ เนื่องจากอยู่นอกสายบังคับบัญชากลุ่มงานที่รับผิดชอบ');
         }
 
         $comment = trim((string) Yii::$app->request->post('comment'));
@@ -569,6 +618,11 @@ class DocumentController extends Controller
 
         if ($identity->hasRole(User::ROLE_OFFICER)) {
             return [Document::STATUS_REGISTERED, Document::STATUS_RETURNED];
+        }
+
+        // กรณีเป็น รอง ผอ. ที่รักษาการแทน ผอ. ด้วย
+        if ($identity->role === User::ROLE_DEPUTY_DIRECTOR && SystemSetting::isActingDirector() && (int)$identity->id === (int)SystemSetting::getActingDirectorUserId()) {
+            return [Document::STATUS_SUBMITTED_TO_DEPUTY, Document::STATUS_SUBMITTED_TO_DIRECTOR];
         }
 
         if ($identity->hasRole(User::ROLE_DEPUTY_DIRECTOR)) {

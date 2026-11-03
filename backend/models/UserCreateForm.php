@@ -35,6 +35,12 @@ class UserCreateForm extends Model
             ['email', 'unique', 'targetClass' => User::class, 'message' => 'Email นี้ถูกใช้แล้ว'],
             ['password', 'string', 'min' => 6, 'max' => 128],
             ['role', 'in', 'range' => array_keys(User::roleOptions())],
+            ['department_id', 'required', 'when' => function ($model) {
+                return in_array($model->role, [User::ROLE_DEPUTY_DIRECTOR, User::ROLE_STAFF], true);
+            }, 'whenClient' => "function (attribute, value) {
+                var r = $('#usercreateform-role').val();
+                return r === 'deputy_director' || r === 'staff';
+            }", 'message' => 'กรุณาเลือกกลุ่มงานที่กำกับดูแลสำหรับ รอง ผอ. หรือหัวหน้ากลุ่มงาน'],
             ['department_id', 'integer'],
             ['department_id', 'exist', 'targetClass' => Department::class, 'targetAttribute' => ['department_id' => 'id']],
             ['department_ids', 'each', 'rule' => ['integer']],

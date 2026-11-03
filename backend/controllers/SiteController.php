@@ -104,7 +104,21 @@ class SiteController extends Controller
         $stats['month_docs'] = (int) Document::find()->where(['>=', 'created_at', $firstDayOfMonth])->count();
 
         // สถิติสำหรับผู้บริหาร
-        $stats['pending_deputy_docs'] = (int) Document::find()->where(['status' => Document::STATUS_SUBMITTED_TO_DEPUTY])->count();
+        if ($identity->hasRole(User::ROLE_DEPUTY_DIRECTOR) && !$identity->hasRole(User::ROLE_ADMIN)) {
+            $isActing = \common\models\SystemSetting::isActingDirector() && (int)$identity->id === (int)\common\models\SystemSetting::getActingDirectorUserId();
+            if (!$isActing) {
+                $deptIds = $identity->departmentIds();
+                $deputyDocQuery = Document::find()->where(['status' => Document::STATUS_SUBMITTED_TO_DEPUTY]);
+                if (!empty($deptIds)) {
+                    $deputyDocQuery->andWhere(['or', ['department_id' => $deptIds], ['department_id' => null]]);
+                }
+                $stats['pending_deputy_docs'] = (int) $deputyDocQuery->count();
+            } else {
+                $stats['pending_deputy_docs'] = (int) Document::find()->where(['status' => Document::STATUS_SUBMITTED_TO_DEPUTY])->count();
+            }
+        } else {
+            $stats['pending_deputy_docs'] = (int) Document::find()->where(['status' => Document::STATUS_SUBMITTED_TO_DEPUTY])->count();
+        }
         $stats['pending_director_docs'] = (int) Document::find()->where(['status' => Document::STATUS_SUBMITTED_TO_DIRECTOR])->count();
 
         // สถิติส่วนตัวของครู/บุคลากร
@@ -310,10 +324,13 @@ class SiteController extends Controller
      */
     public function actionLineAuth(): Response
     {
+        $from = (string) Yii::$app->request->get('from', 'login');
+        Yii::$app->session->set('line_auth_from', $from);
+
         $channelId = (string) Yii::$app->params['line.loginChannelId'];
         if ($channelId === '') {
             Yii::$app->session->setFlash('error', 'ระบบยังไม่ได้ตั้งค่า LINE Login Channel ID');
-            return $this->redirect(['login']);
+            return $this->redirect([$from === 'signup' ? 'signup' : 'login']);
         }
 
         $state = Yii::$app->security->generateRandomString(32);
@@ -339,11 +356,15 @@ class SiteController extends Controller
      */
     public function actionLineCallback(): Response
     {
+        $from = (string) Yii::$app->session->get('line_auth_from', 'login');
+        Yii::$app->session->remove('line_auth_from');
+        $fallbackRoute = ($from === 'signup') ? ['signup'] : ['login'];
+
         $error = Yii::$app->request->get('error');
         if ($error !== null) {
             $errorDesc = Yii::$app->request->get('error_description', 'ผู้ใช้ยกเลิกการเข้าสู่ระบบผ่าน LINE');
-            Yii::$app->session->setFlash('error', 'การเข้าสู่ระบบด้วย LINE ไม่สำเร็จ: ' . $errorDesc);
-            return $this->redirect(['login']);
+            Yii::$app->session->setFlash('error', 'การเชื่อมต่อ LINE ไม่สำเร็จ: ' . $errorDesc);
+            return $this->redirect($fallbackRoute);
         }
 
         $code = Yii::$app->request->get('code');
@@ -353,7 +374,7 @@ class SiteController extends Controller
 
         if (empty($code) || empty($state) || $state !== $savedState) {
             Yii::$app->session->setFlash('error', 'ความปลอดภัยไม่ถูกต้อง (Invalid State) กรุณาลองใหม่อีกครั้ง');
-            return $this->redirect(['login']);
+            return $this->redirect($fallbackRoute);
         }
 
         $channelId = (string) Yii::$app->params['line.loginChannelId'];
@@ -364,29 +385,36 @@ class SiteController extends Controller
         $tokenData = $this->exchangeLineToken($code, $channelId, $channelSecret, $redirectUri);
         if ($tokenData === null || empty($tokenData['access_token'])) {
             Yii::$app->session->setFlash('error', 'ไม่สามารถขอ Token จาก LINE ได้ กรุณาตรวจสอบ Callback URL ใน LINE Developers Console');
-            return $this->redirect(['login']);
+            return $this->redirect($fallbackRoute);
         }
 
         // 2. ดึงข้อมูล User Profile จาก LINE
         $profile = $this->getLineProfile($tokenData['access_token']);
         if ($profile === null || empty($profile['userId'])) {
             Yii::$app->session->setFlash('error', 'ไม่สามารถดึงข้อมูลโปรไฟล์จาก LINE ได้');
-            return $this->redirect(['login']);
+            return $this->redirect($fallbackRoute);
         }
 
         $lineUserId = (string) $profile['userId'];
         $displayName = (string) ($profile['displayName'] ?? '');
 
-        // 3. ค้นหาผู้ใช้จาก line_user_id
-        $user = User::findOne(['line_user_id' => $lineUserId]);
+        // หากพบบัญชีเดิมที่ถูกลบ (STATUS_DELETED) ให้ปลด line_user_id ออก เพื่อให้สามารถลงทะเบียนใหม่ได้
+        $deletedUser = User::findOne(['line_user_id' => $lineUserId, 'status' => User::STATUS_DELETED]);
+        if ($deletedUser instanceof User) {
+            $deletedUser->line_user_id = null;
+            $deletedUser->line_display_name = null;
+            $deletedUser->save(false, ['line_user_id', 'line_display_name']);
+        }
+
+        // 3. ค้นหาผู้ใช้จาก line_user_id ที่ยังไม่ถูกลบ
+        $user = User::find()
+            ->where(['line_user_id' => $lineUserId])
+            ->andWhere(['!=', 'status', User::STATUS_DELETED])
+            ->one();
 
         if ($user instanceof User) {
             if ($user->status === User::STATUS_INACTIVE) {
                 return $this->redirect(['pending-approval', 'id' => $user->id]);
-            }
-            if ($user->status === User::STATUS_DELETED) {
-                Yii::$app->session->setFlash('error', 'บัญชีนี้ถูกปิดการใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
-                return $this->redirect(['login']);
             }
 
             // อัปเดตชื่อแสดงผล LINE และเวลาล็อกอิน
@@ -394,7 +422,11 @@ class SiteController extends Controller
             $user->save(false, ['line_display_name', 'updated_at']);
 
             Yii::$app->user->login($user, 3600 * 24 * 30);
-            Yii::$app->session->setFlash('success', 'ยินดีต้อนรับคุณครู ' . $user->displayName() . ' เข้าสู่ระบบ e-Office');
+            if ($from === 'signup') {
+                Yii::$app->session->setFlash('info', 'บัญชี LINE นี้ลงทะเบียนไว้แล้วในชื่อคุณครู ' . $user->displayName() . ' ระบบจึงเข้าสู่ระบบให้โดยอัตโนมัติ');
+            } else {
+                Yii::$app->session->setFlash('success', 'ยินดีต้อนรับคุณครู ' . $user->displayName() . ' เข้าสู่ระบบ e-Office');
+            }
             return $this->redirect(['/document/my']);
         }
 

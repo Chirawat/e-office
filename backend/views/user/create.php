@@ -53,12 +53,12 @@ $departmentItems = ArrayHelper::map($departments, 'id', 'name');
                 </div>
 
                 <?= $form->field($model, 'department_id')->dropDownList($departmentItems, [
-                    'prompt' => 'ไม่ผูกกลุ่มงาน',
-                ])->hint('ใช้กับบทบาทหัวหน้ากลุ่มงาน เพื่อจำกัดงานที่มองเห็นตามกลุ่มงานหลัก') ?>
+                    'prompt' => '-- เลือกกลุ่มงานที่กำกับดูแล / สังกัด --',
+                ])->label('กลุ่มงานที่กำกับดูแล / สังกัดหลัก')->hint('จำเป็นสำหรับ รอง ผอ. และหัวหน้ากลุ่มงาน เพื่อกำหนดสายการบังคับบัญชาในการตรวจ/สั่งการเอกสาร') ?>
 
                 <?= $form->field($model, 'department_ids')->checkboxList($departmentItems, [
                     'itemOptions' => ['class' => 'form-check-input'],
-                ])->hint('ใช้กับบทบาทผู้ใช้ทั่วไป สามารถสังกัดได้หลายกลุ่มงาน') ?>
+                ])->label('กลุ่มงานที่สังกัด / กำกับดูแลเพิ่มเติม')->hint('สำหรับครูผู้สอน/ผู้ใช้ทั่วไป หรือ รอง ผอ. ที่ดูแลมากกว่า 1 กลุ่มงาน') ?>
 
                 <?= $form->field($model, 'signatureFile')->fileInput(['accept' => 'image/png,image/jpeg'])->hint('รองรับ PNG/JPG ขนาดไม่เกิน 2 MB พื้นหลังโปร่งใสจะสวยที่สุด') ?>
 

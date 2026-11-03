@@ -191,7 +191,7 @@ class UserController extends Controller
         }
 
         $this->markUserDeleted($model);
-        if ($model->save(false, ['username', 'email', 'status', 'updated_at'])) {
+        if ($model->save(false, ['username', 'email', 'status', 'line_user_id', 'line_display_name', 'updated_at'])) {
             Yii::$app->session->setFlash('success', 'ลบผู้ใช้เรียบร้อยแล้ว');
         }
 
@@ -221,6 +221,8 @@ class UserController extends Controller
         $safeUsername = preg_replace('/[^a-zA-Z0-9_.-]+/', '_', $model->username) ?: 'user';
         $model->username = substr($safeUsername, 0, 180) . '__deleted_' . $model->id;
         $model->email = 'deleted_' . $model->id . '_' . time() . '@example.invalid';
+        $model->line_user_id = null;
+        $model->line_display_name = null;
         $model->status = User::STATUS_DELETED;
     }
 

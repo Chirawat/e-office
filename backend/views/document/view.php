@@ -35,7 +35,7 @@ $previewImageUrl = $previewImagePath ? Url::to('@web/' . ltrim($previewImagePath
 $identity = Yii::$app->user->identity;
 $canRegisterDocument = $identity instanceof User && $identity->canRegisterDocument();
 $canSubmitToDeputy = $identity instanceof User && $identity->canSubmitDocumentToDeputy();
-$canGiveDeputyComment = $identity instanceof User && $identity->canGiveDeputyComment();
+$canGiveDeputyComment = $identity instanceof User && $identity->canGiveDeputyComment($model->department_id);
 $canGiveDirectorOrder = $identity instanceof User && $identity->canGiveDirectorOrder();
 $canCompleteDocument = $identity instanceof User && $identity->canCompleteDocument();
 $canForwardDocument = $identity instanceof User && $identity->canForwardDocumentToUser();
@@ -342,29 +342,39 @@ if ($previewPdfUrl) {
                         <?= Html::submitButton('<i class="bi bi-send" aria-hidden="true"></i><span>เสนอรอง ผอ.</span>', ['class' => 'btn btn-primary w-100']) ?>
                     <?= Html::endForm() ?>
 
-                <?php elseif ($model->status === Document::STATUS_SUBMITTED_TO_DEPUTY && $canGiveDeputyComment): ?>
-                    <?= Html::beginForm(['deputy-comment', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
-                        <?= $csrf ?>
-                        <label class="form-label" for="deputy-comment">ความเห็นรอง ผอ.</label>
-                        <?= Html::textarea('comment', '', [
-                            'id' => 'deputy-comment',
-                            'class' => 'form-control',
-                            'rows' => 5,
-                            'placeholder' => 'เห็นควรประชาสัมพันธ์และมอบกลุ่มงานที่เกี่ยวข้องดำเนินการ',
-                        ]) ?>
-                        <div class="action-buttons">
-                            <?= Html::submitButton('<i class="bi bi-send-check" aria-hidden="true"></i><span>เสนอ ผอ.</span>', [
-                                'class' => 'btn btn-primary',
-                                'name' => 'decision',
-                                'value' => 'submit',
+                <?php elseif ($model->status === Document::STATUS_SUBMITTED_TO_DEPUTY): ?>
+                    <?php if ($canGiveDeputyComment): ?>
+                        <?= Html::beginForm(['deputy-comment', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
+                            <?= $csrf ?>
+                            <label class="form-label" for="deputy-comment">ความเห็นรอง ผอ.</label>
+                            <?= Html::textarea('comment', '', [
+                                'id' => 'deputy-comment',
+                                'class' => 'form-control',
+                                'rows' => 5,
+                                'placeholder' => 'เห็นควรประชาสัมพันธ์และมอบกลุ่มงานที่เกี่ยวข้องดำเนินการ',
                             ]) ?>
-                            <?= Html::submitButton('<i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span>ส่งกลับแก้ไข</span>', [
-                                'class' => 'btn btn-outline-danger',
-                                'name' => 'decision',
-                                'value' => 'return',
-                            ]) ?>
+                            <div class="action-buttons">
+                                <?= Html::submitButton('<i class="bi bi-send-check" aria-hidden="true"></i><span>เสนอ ผอ.</span>', [
+                                    'class' => 'btn btn-primary',
+                                    'name' => 'decision',
+                                    'value' => 'submit',
+                                ]) ?>
+                                <?= Html::submitButton('<i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span>ส่งกลับแก้ไข</span>', [
+                                    'class' => 'btn btn-outline-danger',
+                                    'name' => 'decision',
+                                    'value' => 'return',
+                                ]) ?>
+                            </div>
+                        <?= Html::endForm() ?>
+                    <?php else: ?>
+                        <div class="alert alert-info d-flex align-items-center gap-2 mb-0" style="font-size: 0.85rem;">
+                            <i class="bi bi-info-circle-fill fs-5 text-info"></i>
+                            <div>
+                                <strong>รอการพิจารณาจากรองผู้อำนวยการ</strong><br>
+                                เอกสารนี้อยู่ในสายบังคับบัญชาของ <strong><?= Html::encode($model->department ? $model->department->name : 'กลุ่มงานที่เกี่ยวข้อง') ?></strong>
+                            </div>
                         </div>
-                    <?= Html::endForm() ?>
+                    <?php endif; ?>
 
                     <?php if ($canCompleteAssignment): ?>
                         <?= Html::beginForm(['complete', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>

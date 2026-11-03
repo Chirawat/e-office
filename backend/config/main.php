@@ -17,6 +17,10 @@ return [
     'components' => [
         'request' => [
             'csrfParam' => '_csrf-backend',
+            'trustedHosts' => [
+                '127.0.0.1',
+                '::1',
+            ],
         ],
         'user' => [
             'identityClass' => \common\models\User::class,
