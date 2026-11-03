@@ -107,18 +107,75 @@ if (Yii::$app->user->isGuest) {
         'url' => ['/site/signup'],
     ];
 } else {
+    // กำหนดสี ไอคอน และสไตล์ badge ตามบทบาทหน้าที่ (Role)
+    $isActingDirector = $identity instanceof User && \common\models\SystemSetting::isActingDirector() && (int) $identity->id === (int) \common\models\SystemSetting::getActingDirectorUserId();
+    $rawRole = $identity instanceof User ? $identity->role : '';
+
+    if ($isAdmin) {
+        $roleTheme = [
+            'badge' => 'bg-danger text-white',
+            'icon' => 'bi-shield-fill-check',
+            'avatarBg' => 'bg-danger text-white',
+        ];
+    } elseif ($isActingDirector) {
+        $roleTheme = [
+            'badge' => 'bg-warning text-dark',
+            'icon' => 'bi-star-fill',
+            'avatarBg' => 'bg-warning text-dark',
+        ];
+    } elseif ($rawRole === User::ROLE_DIRECTOR) {
+        $roleTheme = [
+            'badge' => 'bg-warning text-dark',
+            'icon' => 'bi-award-fill',
+            'avatarBg' => 'bg-warning text-dark',
+        ];
+    } elseif ($rawRole === User::ROLE_DEPUTY_DIRECTOR) {
+        $roleTheme = [
+            'badge' => 'bg-info text-dark',
+            'icon' => 'bi-person-badge-fill',
+            'avatarBg' => 'bg-info text-dark',
+        ];
+    } elseif ($rawRole === User::ROLE_OFFICER) {
+        $roleTheme = [
+            'badge' => 'bg-success text-white',
+            'icon' => 'bi-pencil-square',
+            'avatarBg' => 'bg-success text-white',
+        ];
+    } elseif ($rawRole === User::ROLE_STAFF) {
+        $roleTheme = [
+            'badge' => 'bg-primary text-white border border-light border-opacity-25',
+            'icon' => 'bi-diagram-3-fill',
+            'avatarBg' => 'bg-primary text-white',
+        ];
+    } else {
+        $roleTheme = [
+            'badge' => 'bg-light text-dark',
+            'icon' => 'bi-person-fill',
+            'avatarBg' => 'bg-light text-dark',
+        ];
+    }
+
+    $deptName = ($identity instanceof User && $identity->department !== null) ? $identity->department->name : null;
+
     // Dropdown ข้อมูลผู้ใช้
     $userMenuItems = [
         [
-            'label' => '<div class="px-2 py-1"><div class="fw-bold text-dark">' . Html::encode($userName) . '</div><div class="small text-muted">' . Html::encode($roleLabel) . '</div></div>',
+            'label' => '<div class="px-3 py-2">'
+                . '<div class="d-flex align-items-center gap-2 mb-2">'
+                . '<span class="badge rounded-circle ' . $roleTheme['avatarBg'] . ' shadow-sm" style="width: 36px; height: 36px; display: inline-grid; place-items: center; font-size: 1.1rem;"><i class="bi ' . $roleTheme['icon'] . '"></i></span>'
+                . '<div class="lh-sm overflow-hidden">'
+                . '<div class="fw-bold text-dark text-truncate" style="max-width: 200px;">' . Html::encode($userName) . '</div>'
+                . ($identity instanceof User && $identity->username ? '<div class="small text-muted text-truncate" style="max-width: 200px;">@' . Html::encode($identity->username) . '</div>' : '')
+                . '</div>'
+                . '</div>'
+                . '<div class="d-flex flex-wrap align-items-center gap-1 pt-1 border-top">'
+                . '<span class="badge ' . $roleTheme['badge'] . ' shadow-sm py-1 px-2"><i class="bi ' . $roleTheme['icon'] . ' me-1"></i>' . Html::encode($roleLabel) . '</span>'
+                . ($deptName ? '<span class="badge bg-secondary-subtle text-secondary-emphasis py-1 px-2 border"><i class="bi bi-building me-1"></i>' . Html::encode($deptName) . '</span>' : '')
+                . '</div>'
+                . '</div>',
             'encode' => false,
-            'options' => ['class' => 'bg-light border-bottom'],
+            'options' => ['class' => 'bg-light bg-opacity-75 border-bottom'],
         ],
-        [
-            'label' => '<i class="bi bi-chat-dots me-2 text-success" aria-hidden="true"></i><span>เชื่อมต่อ LINE ของฉัน</span>',
-            'url' => ['/line/link'],
-        ],
-        '-',
         [
             'label' => '<i class="bi bi-box-arrow-right me-2 text-danger" aria-hidden="true"></i><span>ออกจากระบบ</span>',
             'url' => ['/site/logout'],
@@ -129,8 +186,17 @@ if (Yii::$app->user->isGuest) {
         ],
     ];
 
+    // ปุ่มแสดงข้อมูล User บนแถบ Navbar (แสดงชื่อ พร้อม Role Badge เด่นชัด)
+    $userButtonHtml = '<div class="d-inline-flex align-items-center gap-2 py-1">'
+        . '<span class="badge rounded-circle ' . $roleTheme['avatarBg'] . ' shadow-sm" style="width: 28px; height: 28px; display: inline-grid; place-items: center; font-size: 0.9rem;"><i class="bi ' . $roleTheme['icon'] . '"></i></span>'
+        . '<div class="d-flex flex-column text-start lh-1">'
+        . '<span class="fw-semibold text-white small">' . Html::encode($userName) . '</span>'
+        . '<span class="badge ' . $roleTheme['badge'] . ' shadow-sm mt-1 fw-normal px-2 py-0 text-truncate" style="font-size: 0.72rem; letter-spacing: 0.01em; max-width: 160px;">' . Html::encode($roleLabel) . '</span>'
+        . '</div>'
+        . '</div>';
+
     $rightItems[] = [
-        'label' => '<div class="d-inline-flex align-items-center gap-2"><span class="badge rounded-circle bg-white text-primary p-1" style="width: 24px; height: 24px; display: inline-grid; place-items: center;"><i class="bi bi-person-fill"></i></span><span>' . Html::encode($userName) . '</span><span class="badge bg-white bg-opacity-20 text-white ms-1 fw-normal">' . Html::encode($roleLabel) . '</span></div>',
+        'label' => $userButtonHtml,
         'items' => $userMenuItems,
         'encode' => false,
     ];

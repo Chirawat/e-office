@@ -174,6 +174,14 @@ class User extends ActiveRecord implements IdentityInterface
 
     public function roleLabel(): string
     {
+        $isActing = SystemSetting::isActingDirector() && (int) $this->id === (int) SystemSetting::getActingDirectorUserId();
+        if ($isActing) {
+            if ($this->role === self::ROLE_DEPUTY_DIRECTOR) {
+                return 'รอง ผอ. (รักษาการแทน ผอ.)';
+            }
+            return 'รักษาการแทน ผอ.';
+        }
+
         $base = self::roleOptions()[$this->role] ?? $this->role;
         if ($this->role === self::ROLE_DEPUTY_DIRECTOR && $this->department !== null) {
             return $base . ' (' . $this->department->name . ')';
