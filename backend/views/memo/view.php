@@ -111,13 +111,18 @@ $pdfVersion = (string) Yii::$app->request->get('pdfv', (string) ($model->updated
 $memoPdfUrl = Url::to(['pdf', 'id' => $model->id, 'v' => $pdfVersion]);
 $previewImageUrl = $previewImagePath ? Url::to('@web/' . ltrim($previewImagePath, '/')) : null;
 $csrf = Html::hiddenInput(Yii::$app->request->csrfParam, Yii::$app->request->csrfToken);
-$canEdit = $identity instanceof User
-    && ((int) $model->created_by === (int) $identity->id || $identity->hasRole(User::ROLE_ADMIN))
+
+$isAdmin = $identity instanceof User && $identity->hasRole(User::ROLE_ADMIN);
+$isCreator = $identity instanceof User && (int) $model->created_by === (int) $identity->id;
+$canEdit = ($isCreator || $isAdmin)
     && in_array($model->status, [Memo::STATUS_DRAFT, Memo::STATUS_RETURNED], true);
 $showStampPositionTools = true;
-$canAdjustStampPositions = $showStampPositionTools && $identity instanceof User
-    && ((int) $model->created_by === (int) $identity->id || $identity->hasRole(User::ROLE_ADMIN))
-    && !in_array($model->status, [Memo::STATUS_APPROVED, Memo::STATUS_COMPLETED], true);
+$canAdjustStampPositions = $showStampPositionTools && $canEdit;
+
+$canReviewAsStaff = ($identity instanceof User && ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_OFFICER || $isAdmin || (int) $identity->id === (int) $model->current_actor_id));
+$canReviewAsDeputy = ($identity instanceof User && ($identity->hasRole(User::ROLE_DEPUTY_DIRECTOR) || $isAdmin));
+$canReviewAsDirector = ($identity instanceof User && ($identity->hasRole(User::ROLE_DIRECTOR) || $isAdmin));
+$canComplete = ($isCreator || $isAdmin) && $model->status === Memo::STATUS_APPROVED;
 $stampPositionDefaults = array_map(
     static fn (array $position): array => [
         'x' => (float) $position['x'],
@@ -349,7 +354,27 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                                 </div>
                             </div>
                         <?php endforeach; ?>
-                        <?= Html::submitButton('<i class="bi bi-save" aria-hidden="true"></i><span>บันทึกตำแหน่งและสร้าง PDF ใหม่</span>', ['class' => 'btn btn-primary w-100 mt-2']) ?>
+
+                        <?php if ($canEdit): ?>
+                            <div class="mt-3 p-3 bg-light rounded border">
+                                <label class="form-label mb-1"><strong><i class="bi bi-send me-1"></i>ส่งเสนอถึง:</strong></label>
+                                <?= Html::dropDownList('target', 'staff', [
+                                    'staff' => 'หัวหน้ากลุ่มงาน / เจ้าหน้าที่',
+                                    'deputy' => 'รองผู้อำนวยการ',
+                                    'director' => 'ผู้อำนวยการ',
+                                ], ['class' => 'form-select mb-2']) ?>
+                                <div class="d-grid gap-2">
+                                    <button type="submit" name="submit_after_save" value="1" class="btn btn-success">
+                                        <i class="bi bi-send-check-fill me-1"></i> บันทึกตำแหน่งและเสนอต่อทันที
+                                    </button>
+                                    <button type="submit" name="submit_after_save" value="0" class="btn btn-outline-primary btn-sm">
+                                        <i class="bi bi-save me-1"></i> บันทึกตำแหน่งอย่างเดียว
+                                    </button>
+                                </div>
+                            </div>
+                        <?php else: ?>
+                            <?= Html::submitButton('<i class="bi bi-save me-1" aria-hidden="true"></i><span>บันทึกตำแหน่งและสร้าง PDF ใหม่</span>', ['class' => 'btn btn-primary w-100 mt-2']) ?>
+                        <?php endif; ?>
                     <?= Html::endForm() ?>
                 </section>
             <?php endif; ?>
@@ -359,45 +384,90 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                 <h2>ดำเนินการ</h2>
                 <?php if ($canEdit): ?>
                     <?= Html::beginForm(['submit', 'id' => $model->id], 'post') ?>
-                        <?= Html::submitButton('<i class="bi bi-send" aria-hidden="true"></i><span>เสนอหัวหน้ากลุ่มงาน</span>', ['class' => 'btn btn-primary w-100']) ?>
+                        <?= $csrf ?>
+                        <div class="mb-3">
+                            <label class="form-label">ส่งเสนอถึง</label>
+                            <?= Html::dropDownList('target', 'staff', [
+                                'staff' => 'หัวหน้ากลุ่มงาน / เจ้าหน้าที่',
+                                'deputy' => 'รองผู้อำนวยการ',
+                                'director' => 'ผู้อำนวยการ',
+                            ], ['class' => 'form-select']) ?>
+                        </div>
+                        <?= Html::submitButton('<i class="bi bi-send me-1" aria-hidden="true"></i><span>ส่งเสนอพิจารณา</span>', ['class' => 'btn btn-primary w-100']) ?>
                     <?= Html::endForm() ?>
-                <?php endif; ?>
+                <?php elseif ($model->status === Memo::STATUS_SUBMITTED_TO_STAFF): ?>
+                    <?php if ($canReviewAsStaff): ?>
+                        <?= Html::beginForm(['staff-review', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
+                            <?= $csrf ?>
+                            <label class="form-label">ความเห็นหัวหน้ากลุ่มงาน</label>
+                            <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4, 'placeholder' => 'ระบุความเห็น...']) ?>
+                            <?= Html::dropDownList('decision', 'submit_deputy', ['submit_deputy' => 'เสนอรอง ผอ.', 'submit_director' => 'เสนอ ผอ. โดยตรง', 'return' => 'ส่งกลับแก้ไข'], ['class' => 'form-select mt-2']) ?>
+                            <?= Html::submitButton('<i class="bi bi-send-check me-1" aria-hidden="true"></i><span>บันทึกผลพิจารณา</span>', ['class' => 'btn btn-primary w-100 mt-3']) ?>
+                        <?= Html::endForm() ?>
+                    <?php else: ?>
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-hourglass-split me-1"></i> อยู่ระหว่างรอเจ้าหน้าที่/หัวหน้ากลุ่มงานตรวจทาน
+                        </div>
+                    <?php endif; ?>
 
-                <?php if ($identity instanceof User && $identity->role === User::ROLE_STAFF && $model->status === Memo::STATUS_SUBMITTED_TO_STAFF): ?>
-                    <?= Html::beginForm(['staff-review', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
-                        <label class="form-label">ความเห็นหัวหน้ากลุ่มงาน</label>
-                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4, 'placeholder' => 'ระบุความเห็น...']) ?>
-                        <?= Html::dropDownList('decision', 'submit_deputy', ['submit_deputy' => 'เสนอรอง ผอ.', 'submit_director' => 'เสนอ ผอ. โดยตรง', 'return' => 'ส่งกลับแก้ไข'], ['class' => 'form-select mt-2']) ?>
-                        <?= Html::submitButton('<i class="bi bi-send-check" aria-hidden="true"></i><span>บันทึกผลพิจารณา</span>', ['class' => 'btn btn-primary w-100 mt-3']) ?>
-                    <?= Html::endForm() ?>
-                <?php endif; ?>
+                <?php elseif ($model->status === Memo::STATUS_SUBMITTED_TO_DEPUTY): ?>
+                    <?php if ($canReviewAsDeputy): ?>
+                        <?= Html::beginForm(['deputy-review', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
+                            <?= $csrf ?>
+                            <label class="form-label">ความเห็นรอง ผอ.</label>
+                            <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4, 'placeholder' => 'ระบุความเห็น...']) ?>
+                            <?= Html::dropDownList('decision', 'submit_director', ['submit_director' => 'เสนอ ผอ.', 'return' => 'ส่งกลับแก้ไข'], ['class' => 'form-select mt-2']) ?>
+                            <?= Html::submitButton('<i class="bi bi-send-check me-1" aria-hidden="true"></i><span>บันทึกผลพิจารณา</span>', ['class' => 'btn btn-primary w-100 mt-3']) ?>
+                        <?= Html::endForm() ?>
+                    <?php else: ?>
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-hourglass-split me-1"></i> อยู่ระหว่างรอรองผู้อำนวยการพิจารณา
+                        </div>
+                    <?php endif; ?>
 
-                <?php if ($identity instanceof User && $identity->role === User::ROLE_DEPUTY_DIRECTOR && $model->status === Memo::STATUS_SUBMITTED_TO_DEPUTY): ?>
-                    <?= Html::beginForm(['deputy-review', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
-                        <label class="form-label">ความเห็นรอง ผอ.</label>
-                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4, 'placeholder' => 'ระบุความเห็น...']) ?>
-                        <?= Html::dropDownList('decision', 'submit_director', ['submit_director' => 'เสนอ ผอ.', 'return' => 'ส่งกลับแก้ไข'], ['class' => 'form-select mt-2']) ?>
-                        <?= Html::submitButton('<i class="bi bi-send-check" aria-hidden="true"></i><span>บันทึกผลพิจารณา</span>', ['class' => 'btn btn-primary w-100 mt-3']) ?>
-                    <?= Html::endForm() ?>
-                <?php endif; ?>
+                <?php elseif ($model->status === Memo::STATUS_SUBMITTED_TO_DIRECTOR): ?>
+                    <?php if ($canReviewAsDirector): ?>
+                        <?= Html::beginForm(['director-review', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
+                            <?= $csrf ?>
+                            <label class="form-label">คำสั่ง/ความเห็น ผอ.</label>
+                            <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4, 'placeholder' => 'ระบุคำสั่ง/ความเห็น...']) ?>
+                            <?= Html::dropDownList('decision', 'approve', ['approve' => 'อนุมัติ/เห็นชอบ', 'return' => 'ส่งกลับแก้ไข'], ['class' => 'form-select mt-2']) ?>
+                            <?= Html::submitButton('<i class="bi bi-check2-circle me-1" aria-hidden="true"></i><span>บันทึกผลพิจารณา</span>', ['class' => 'btn btn-success w-100 mt-3']) ?>
+                        <?= Html::endForm() ?>
+                    <?php else: ?>
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-hourglass-split me-1"></i> อยู่ระหว่างรอผู้อำนวยการอนุมัติ/สั่งการ
+                        </div>
+                    <?php endif; ?>
 
-                <?php if ($identity instanceof User && $identity->role === User::ROLE_DIRECTOR && $model->status === Memo::STATUS_SUBMITTED_TO_DIRECTOR): ?>
-                    <?= Html::beginForm(['director-review', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
-                        <label class="form-label">คำสั่ง/ความเห็น ผอ.</label>
-                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4, 'placeholder' => 'ระบุคำสั่ง/ความเห็น...']) ?>
-                        <?= Html::dropDownList('decision', 'approve', ['approve' => 'อนุมัติ/เห็นชอบ', 'return' => 'ส่งกลับแก้ไข'], ['class' => 'form-select mt-2']) ?>
-                        <?= Html::submitButton('<i class="bi bi-check2-circle" aria-hidden="true"></i><span>บันทึกผลพิจารณา</span>', ['class' => 'btn btn-success w-100 mt-3']) ?>
-                    <?= Html::endForm() ?>
-                <?php endif; ?>
+                <?php elseif ($model->status === Memo::STATUS_APPROVED): ?>
+                    <?php if ($canComplete): ?>
+                        <?= Html::beginForm(['complete', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
+                            <?= $csrf ?>
+                            <div class="alert alert-success py-2 mb-2">
+                                <i class="bi bi-check-circle-fill me-1"></i> ผู้อำนวยการอนุมัติเรียบร้อยแล้ว
+                            </div>
+                            <label class="form-label">หมายเหตุปิดเรื่อง</label>
+                            <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 3, 'placeholder' => 'ระบุหมายเหตุ...']) ?>
+                            <?= Html::submitButton('<i class="bi bi-check-circle me-1" aria-hidden="true"></i><span>รับทราบและปิดเรื่อง</span>', ['class' => 'btn btn-success w-100 mt-3']) ?>
+                        <?= Html::endForm() ?>
+                    <?php else: ?>
+                        <div class="alert alert-success mb-0">
+                            <i class="bi bi-check-circle-fill me-1"></i> อนุมัติ/เห็นชอบเรียบร้อยแล้ว (รอเจ้าของเรื่องปิดงาน)
+                        </div>
+                    <?php endif; ?>
 
-                <?php if ($identity instanceof User && (int) $model->created_by === (int) $identity->id && $model->status === Memo::STATUS_APPROVED): ?>
-                    <?= Html::beginForm(['complete', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
-                        <label class="form-label">หมายเหตุปิดเรื่อง</label>
-                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 3, 'placeholder' => 'ระบุหมายเหตุ...']) ?>
-                        <?= Html::submitButton('<i class="bi bi-check-circle" aria-hidden="true"></i><span>รับทราบและปิดเรื่อง</span>', ['class' => 'btn btn-success w-100 mt-3']) ?>
-                    <?= Html::endForm() ?>
+                <?php elseif ($model->status === Memo::STATUS_COMPLETED): ?>
+                    <div class="alert alert-secondary mb-0">
+                        <i class="bi bi-check2-all me-1"></i> เสร็จสิ้นกระบวนการเรียบร้อยแล้ว
+                    </div>
+
+                <?php elseif ($model->status === Memo::STATUS_REJECTED): ?>
+                    <div class="alert alert-danger mb-0">
+                        <i class="bi bi-x-circle-fill me-1"></i> บันทึกข้อความนี้ไม่ได้รับการอนุมัติ
+                    </div>
                 <?php endif; ?>
-                <p class="muted-text mt-3">เมื่อบันทึกผลพิจารณาแล้ว PDF ด้านซ้ายจะสร้างใหม่พร้อมความเห็นและลายเซ็นล่าสุด</p>
+                <p class="muted-text mt-3 mb-0">เมื่อบันทึกผลพิจารณาแล้ว PDF ด้านซ้ายจะสร้างใหม่พร้อมความเห็นและลายเซ็นล่าสุด</p>
             </section>
 
             <!-- ประวัติการดำเนินการ -->

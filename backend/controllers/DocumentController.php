@@ -257,21 +257,12 @@ class DocumentController extends Controller
         ]);
 
         // 3. สรุปสถิติงานที่ต้องดำเนินการ/ติดตามสำหรับช่วงทดลองใช้ (เฉพาะงานค้างที่ต้อง Take Action)
-        $myAssignedDocCount = $docDataProvider->getTotalCount();
-        
-        // บันทึกข้อความที่กำลังอยู่ระหว่างดำเนินการ (เสนอตามสายงาน หรือรอตรวจ/ลงนาม)
-        $activeMemoQuery = Memo::find()
-            ->where(['not in', 'status', [Memo::STATUS_COMPLETED, Memo::STATUS_APPROVED]])
-            ->andWhere([
-                'or',
-                ['current_actor_id' => $identity->id],
-                ['created_by' => $identity->id],
-            ]);
-        $myActiveMemosCount = (int) $activeMemoQuery->count();
+        $docPendingCount = (int) $docDataProvider->getTotalCount();
+        $memoPendingCount = (int) $memoDataProvider->getTotalCount();
 
         $stats = [
-            'doc_pending' => $myAssignedDocCount,
-            'memo_active' => $myActiveMemosCount,
+            'doc_pending' => $docPendingCount,
+            'memo_active' => $memoPendingCount,
         ];
 
         $unreadDocQuery = (clone $docQuery)
@@ -300,6 +291,8 @@ class DocumentController extends Controller
             'identity' => $identity,
             'docDataProvider' => $docDataProvider,
             'memoDataProvider' => $memoDataProvider,
+            'docPendingCount' => $docPendingCount,
+            'memoPendingCount' => $memoPendingCount,
             'stats' => $stats,
             'keyword' => $keyword,
             'memoKeyword' => $memoKeyword,
@@ -838,7 +831,7 @@ class DocumentController extends Controller
             return;
         }
 
-        $query->andWhere([
+        $conditions = [
             'or',
             ['current_actor_id' => $identity->id],
             [
@@ -846,7 +839,34 @@ class DocumentController extends Controller
                 ['created_by' => $identity->id],
                 ['status' => [Memo::STATUS_DRAFT, Memo::STATUS_RETURNED, Memo::STATUS_APPROVED]],
             ],
-        ]);
+        ];
+
+        // หากเป็น ผอ. หรือ รักษาราชการแทน ผอ. ให้เห็นบันทึกข้อความทั้งหมดที่อยู่ในสถานะ "รอ ผอ.พิจารณา"
+        $isActingDirector = SystemSetting::isActingDirector() && (int) $identity->id === (int) SystemSetting::getActingDirectorUserId();
+        if ($identity->role === User::ROLE_DIRECTOR || $isActingDirector) {
+            $conditions[] = ['status' => Memo::STATUS_SUBMITTED_TO_DIRECTOR];
+        }
+
+        // หากเป็น รอง ผอ. ให้เห็นบันทึกข้อความทั้งหมดที่อยู่ในสถานะ "รอรอง ผอ.พิจารณา" เฉพาะกลุ่มงานที่กำกับดูแล
+        if ($identity->role === User::ROLE_DEPUTY_DIRECTOR) {
+            $myDepts = $identity->departmentIds();
+            if (!empty($myDepts)) {
+                $conditions[] = ['and', ['status' => Memo::STATUS_SUBMITTED_TO_DEPUTY], ['department_id' => $myDepts]];
+            } else {
+                $conditions[] = ['status' => Memo::STATUS_SUBMITTED_TO_DEPUTY];
+            }
+        }
+
+        // หากเป็น หัวหน้ากลุ่มงาน หรือ เจ้าหน้าที่ ให้เห็นบันทึกข้อความที่อยู่ในสถานะ "รอหัวหน้ากลุ่มงาน/เจ้าหน้าที่ตรวจทาน"
+        if ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_OFFICER) {
+            if ($identity->department_id !== null) {
+                $conditions[] = ['and', ['status' => Memo::STATUS_SUBMITTED_TO_STAFF], ['or', ['department_id' => $identity->department_id], ['department_id' => null]]];
+            } else {
+                $conditions[] = ['status' => Memo::STATUS_SUBMITTED_TO_STAFF];
+            }
+        }
+
+        $query->andWhere($conditions);
     }
 
     private function canCurrentUserViewDocument(Document $model): bool

@@ -142,7 +142,10 @@ class MemoPdfService extends Component
 
     private function drawFirstPageSignatures(Fpdi $pdf, Memo $memo, float $pageWidth, float $pageHeight): void
     {
-        $this->drawSignature($pdf, $memo->creator, $memo->created_at, $this->signaturePosition($memo, MemoStampPosition::TYPE_CREATOR), $pageWidth, $pageHeight, true);
+        // วาดลายเซ็นเจ้าของเรื่องเมื่อเอกสารถูกกดส่งแล้ว (ไม่ใช่ฉบับร่าง)
+        if ($memo->status !== Memo::STATUS_DRAFT) {
+            $this->drawSignature($pdf, $memo->creator, $memo->created_at, $this->signaturePosition($memo, MemoStampPosition::TYPE_CREATOR), $pageWidth, $pageHeight, true);
+        }
 
         foreach ([MemoStampPosition::TYPE_STAFF_REVIEW, MemoStampPosition::TYPE_DEPUTY_REVIEW, MemoStampPosition::TYPE_DIRECTOR_APPROVE] as $actionName) {
             $action = $this->latestAction($memo, [$actionName]);
@@ -178,6 +181,11 @@ class MemoPdfService extends Component
         if ($signaturePath !== null) {
             [$imageX, $imageY, $imageWidth, $imageHeight] = $this->containedImageBox($signaturePath, $signatureX, $y, $signatureWidth, $signatureHeight);
             $pdf->Image($signaturePath, $imageX, $imageY, $imageWidth, $imageHeight, '', '', '', false, 300);
+        } else {
+            $pdf->SetTextColor(37, 60, 155);
+            $pdf->SetFont('freeserif', 'B', 10.5);
+            $pdf->SetXY($signatureX, $y + ($signatureHeight / 2) - 2.5);
+            $pdf->Cell($signatureWidth, 5, $user ? $user->displayName() : '', 0, 2, 'C');
         }
 
         $pdf->SetTextColor(37, 60, 155);
@@ -216,6 +224,11 @@ class MemoPdfService extends Component
         if ($signaturePath !== null) {
             [$imageX, $imageY, $imageWidth, $imageHeight] = $this->containedImageBox($signaturePath, $signatureX, $signatureY, $signatureWidth, $signatureHeight);
             $pdf->Image($signaturePath, $imageX, $imageY, $imageWidth, $imageHeight, '', '', '', false, 300);
+        } else {
+            $pdf->SetTextColor(37, 60, 155);
+            $pdf->SetFont('freeserif', 'B', 10.5);
+            $pdf->SetXY($signatureX, $signatureY + ($signatureHeight / 2) - 2.5);
+            $pdf->Cell($signatureWidth, 5, $action->actor ? $action->actor->displayName() : '', 0, 2, 'C');
         }
 
         $pdf->SetFont('freeserif', '', 9.5);

@@ -61,16 +61,30 @@ class MemoController extends Controller
         $departmentId = Yii::$app->request->get('department_id');
         $departmentId = ($departmentId !== null && $departmentId !== '') ? (int) $departmentId : null;
 
+        // รายการกลุ่มงานที่เปิดใช้งาน (กรองเฉพาะกลุ่มงานที่ตนสังกัด สำหรับ ผู้ใช้งานทั่วไป, หัวหน้ากลุ่มงาน, รอง ผอ.)
+        $deptQuery = Department::find()
+            ->where(['is_active' => true])
+            ->orderBy(['sort_order' => SORT_ASC, 'id' => SORT_ASC]);
+
+        if ($this->isDepartmentRestrictedUser($identity)) {
+            $myDeptIds = $identity->departmentIds();
+            if (!empty($myDeptIds)) {
+                $deptQuery->andWhere(['id' => $myDeptIds]);
+            } else {
+                $deptQuery->andWhere('1 = 0');
+            }
+
+            if ($departmentId !== null && !in_array($departmentId, $myDeptIds, true)) {
+                $departmentId = null;
+            }
+        }
+
+        $departments = $deptQuery->all();
+
         $query = Memo::find()
             ->with(['department', 'creator', 'currentActor'])
             ->orderBy(['{{%memo}}.[[updated_at]]' => SORT_DESC, '{{%memo}}.[[id]]' => SORT_DESC]);
         $this->applyVisibilityScope($query, $identity);
-
-        // รายการกลุ่มงานทั้งหมดที่เปิดใช้งาน
-        $departments = Department::find()
-            ->where(['is_active' => true])
-            ->orderBy(['sort_order' => SORT_ASC, 'id' => SORT_ASC])
-            ->all();
 
         // ฐานการนับจำนวนบันทึกสำหรับแต่ละแท็บ
         $countQuery = Memo::find();
@@ -312,6 +326,36 @@ class MemoController extends Controller
             Yii::$app->session->setFlash('warning', 'บันทึกตำแหน่งแล้ว แต่สร้าง PDF ใหม่ไม่สำเร็จ: ' . $e->getMessage());
         }
 
+        // หากผู้ใช้กดปุ่ม "บันทึกตำแหน่งและเสนอต่อ"
+        $submitAfterSave = Yii::$app->request->post('submit_after_save') === '1';
+        if ($submitAfterSave && $this->canEdit($memo, $identity)) {
+            $target = (string) Yii::$app->request->post('target', 'staff');
+            if ($target === 'deputy') {
+                $memo->status = Memo::STATUS_SUBMITTED_TO_DEPUTY;
+                $memo->current_actor_id = $this->firstUserId(User::ROLE_DEPUTY_DIRECTOR);
+                $this->changeStatus($memo, Memo::STATUS_SUBMITTED_TO_DEPUTY, 'submit_to_deputy', 'เสนอรอง ผอ.');
+            } elseif ($target === 'director') {
+                $memo->status = Memo::STATUS_SUBMITTED_TO_DIRECTOR;
+                $memo->current_actor_id = $this->firstUserId(User::ROLE_DIRECTOR);
+                $this->changeStatus($memo, Memo::STATUS_SUBMITTED_TO_DIRECTOR, 'submit_to_director', 'เสนอ ผอ.');
+            } else {
+                $this->prepareSubmitToStaff($memo);
+                $this->changeStatus($memo, Memo::STATUS_SUBMITTED_TO_STAFF, 'submit_to_staff', 'เสนอหัวหน้ากลุ่มงาน');
+            }
+            $this->notifyCurrentActor($memo, 'มีบันทึกเสนอใหม่รอพิจารณา');
+
+            try {
+                $service = new MemoPdfService();
+                $service->generate($memo);
+                $service->generatePreviewImage($memo);
+            } catch (\Throwable $e) {
+                Yii::error($e, __METHOD__);
+            }
+
+            Yii::$app->session->setFlash('success', 'บันทึกตำแหน่งลายเซ็นและเสนอบันทึกข้อความเรียบร้อยแล้ว');
+            return $this->redirect(['view', 'id' => $memo->id, 'pdfv' => time()]);
+        }
+
         return $this->redirect(['view', 'id' => $memo->id, 'pdfv' => time()]);
     }
 
@@ -323,18 +367,41 @@ class MemoController extends Controller
             throw new ForbiddenHttpException('ไม่สามารถเสนอบันทึกนี้ได้');
         }
 
-        $this->prepareSubmitToStaff($memo);
-        $this->changeStatus($memo, Memo::STATUS_SUBMITTED_TO_STAFF, 'submit_to_staff', 'เสนอหัวหน้ากลุ่มงาน');
+        $target = (string) Yii::$app->request->post('target', 'staff');
+        if ($target === 'deputy') {
+            $memo->status = Memo::STATUS_SUBMITTED_TO_DEPUTY;
+            $memo->current_actor_id = $this->firstUserId(User::ROLE_DEPUTY_DIRECTOR);
+            $this->changeStatus($memo, Memo::STATUS_SUBMITTED_TO_DEPUTY, 'submit_to_deputy', 'เสนอรอง ผอ.');
+        } elseif ($target === 'director') {
+            $memo->status = Memo::STATUS_SUBMITTED_TO_DIRECTOR;
+            $memo->current_actor_id = $this->firstUserId(User::ROLE_DIRECTOR);
+            $this->changeStatus($memo, Memo::STATUS_SUBMITTED_TO_DIRECTOR, 'submit_to_director', 'เสนอ ผอ.');
+        } else {
+            $this->prepareSubmitToStaff($memo);
+            $this->changeStatus($memo, Memo::STATUS_SUBMITTED_TO_STAFF, 'submit_to_staff', 'เสนอหัวหน้ากลุ่มงาน');
+        }
+
         $this->notifyCurrentActor($memo, 'มีบันทึกเสนอใหม่รอพิจารณา');
 
+        try {
+            $service = new MemoPdfService();
+            $service->generate($memo);
+            $service->generatePreviewImage($memo);
+        } catch (\Throwable $e) {
+            Yii::error($e, __METHOD__);
+        }
+
         Yii::$app->session->setFlash('success', 'เสนอบันทึกเรียบร้อยแล้ว');
-        return $this->redirect(['view', 'id' => $memo->id]);
+        return $this->redirect(['view', 'id' => $memo->id, 'pdfv' => time()]);
     }
 
     public function actionStaffReview(int $id): Response
     {
-        $this->requireRole(User::ROLE_STAFF, 'เฉพาะหัวหน้ากลุ่มงานเท่านั้นที่พิจารณาขั้นนี้ได้');
         $memo = $this->findModel($id);
+        $identity = $this->identity();
+        if (!$identity->hasRole([User::ROLE_STAFF, User::ROLE_OFFICER]) && (int) $identity->id !== (int) $memo->current_actor_id) {
+            throw new ForbiddenHttpException('เฉพาะหัวหน้ากลุ่มงานหรือเจ้าหน้าที่เท่านั้นที่พิจารณาขั้นนี้ได้');
+        }
         if ($memo->status !== Memo::STATUS_SUBMITTED_TO_STAFF) {
             Yii::$app->session->setFlash('warning', 'บันทึกไม่ได้อยู่ในสถานะรอหัวหน้ากลุ่มงาน');
             return $this->redirect(['view', 'id' => $memo->id]);
@@ -356,7 +423,7 @@ class MemoController extends Controller
         $this->changeStatus($memo, $nextStatus, 'staff_review', $comment);
         $this->notifyCurrentActor($memo, 'มีบันทึกเสนอรอพิจารณา');
         Yii::$app->session->setFlash('success', 'บันทึกความเห็นและเสนอขั้นต่อไปเรียบร้อยแล้ว');
-        return $this->redirect(['view', 'id' => $memo->id]);
+        return $this->redirect(['view', 'id' => $memo->id, 'pdfv' => time()]);
     }
 
     public function actionDeputyReview(int $id): Response
@@ -376,14 +443,14 @@ class MemoController extends Controller
         }
         if ($decision === 'return') {
             $this->returnMemo($memo, 'deputy_return', $comment);
-            return $this->redirect(['view', 'id' => $memo->id]);
+            return $this->redirect(['view', 'id' => $memo->id, 'pdfv' => time()]);
         }
 
         $memo->current_actor_id = $this->firstUserId(User::ROLE_DIRECTOR);
         $this->changeStatus($memo, Memo::STATUS_SUBMITTED_TO_DIRECTOR, 'deputy_review', $comment);
         $this->notifyCurrentActor($memo, 'มีบันทึกเสนอรอ ผอ. พิจารณา');
         Yii::$app->session->setFlash('success', 'เสนอ ผอ. เรียบร้อยแล้ว');
-        return $this->redirect(['view', 'id' => $memo->id]);
+        return $this->redirect(['view', 'id' => $memo->id, 'pdfv' => time()]);
     }
 
     public function actionDirectorReview(int $id): Response
@@ -403,14 +470,14 @@ class MemoController extends Controller
         }
         if ($decision === 'return') {
             $this->returnMemo($memo, 'director_return', $comment);
-            return $this->redirect(['view', 'id' => $memo->id]);
+            return $this->redirect(['view', 'id' => $memo->id, 'pdfv' => time()]);
         }
 
         $memo->current_actor_id = $memo->created_by;
         $this->changeStatus($memo, Memo::STATUS_APPROVED, 'director_approve', $comment);
         $this->notifyCurrentActor($memo, 'บันทึกเสนอได้รับการอนุมัติแล้ว');
         Yii::$app->session->setFlash('success', 'อนุมัติบันทึกเรียบร้อยแล้ว');
-        return $this->redirect(['view', 'id' => $memo->id]);
+        return $this->redirect(['view', 'id' => $memo->id, 'pdfv' => time()]);
     }
 
     public function actionComplete(int $id): Response
@@ -465,7 +532,34 @@ class MemoController extends Controller
     private function prepareSubmitToStaff(Memo $memo): void
     {
         $memo->status = Memo::STATUS_SUBMITTED_TO_STAFF;
-        $memo->current_actor_id = $this->staffReviewerId($memo);
+        $staffId = $this->staffReviewerId($memo);
+        if ($staffId !== null) {
+            $memo->current_actor_id = $staffId;
+        } else {
+            // หากยังไม่มีผู้ใช้ role staff ในสังกัด ให้ค้นหาเจ้าหน้าที่ (officer) หรือบุคลากรในสังกัดก่อน
+            $deptUser = null;
+            if ($memo->department_id !== null) {
+                $deptUser = User::find()->select('id')
+                    ->where(['status' => User::STATUS_ACTIVE, 'department_id' => $memo->department_id])
+                    ->andWhere(['role' => [User::ROLE_STAFF, User::ROLE_OFFICER]])
+                    ->andWhere(['!=', 'id', $memo->created_by])
+                    ->scalar();
+
+                if (!$deptUser) {
+                    $deptUser = User::find()->select('id')
+                        ->where(['status' => User::STATUS_ACTIVE, 'department_id' => $memo->department_id])
+                        ->andWhere(['!=', 'id', $memo->created_by])
+                        ->scalar();
+                }
+            }
+
+            if ($deptUser !== false && $deptUser !== null) {
+                $memo->current_actor_id = (int) $deptUser;
+            } else {
+                $officerId = $this->firstUserId(User::ROLE_OFFICER, false);
+                $memo->current_actor_id = $officerId ?? $this->firstUserId(User::ROLE_ADMIN);
+            }
+        }
     }
 
     private function staffReviewerId(Memo $memo): ?int
@@ -480,10 +574,10 @@ class MemoController extends Controller
             return (int) $id;
         }
 
-        return $this->firstUserId(User::ROLE_STAFF);
+        return $this->firstUserId(User::ROLE_STAFF, false);
     }
 
-    private function firstUserId(string $role): ?int
+    private function firstUserId(string $role, bool $fallbackToAdmin = true): ?int
     {
         if ($role === User::ROLE_DIRECTOR && SystemSetting::isActingDirector()) {
             $actingUserId = SystemSetting::getActingDirectorUserId();
@@ -493,8 +587,18 @@ class MemoController extends Controller
         }
 
         $id = User::find()->select('id')->where(['status' => User::STATUS_ACTIVE, 'role' => $role])->scalar();
+        if ($id !== false && $id !== null) {
+            return (int) $id;
+        }
 
-        return $id !== false && $id !== null ? (int) $id : null;
+        if ($fallbackToAdmin) {
+            $adminId = User::find()->select('id')->where(['status' => User::STATUS_ACTIVE, 'role' => User::ROLE_ADMIN])->scalar();
+            if ($adminId !== false && $adminId !== null) {
+                return (int) $adminId;
+            }
+        }
+
+        return null;
     }
 
     private function changeStatus(Memo $memo, string $toStatus, string $action, string $comment): void
@@ -565,42 +669,72 @@ class MemoController extends Controller
         return (int) $memo->created_by === (int) $identity->id || $identity->hasRole(User::ROLE_ADMIN);
     }
 
+    private function isDepartmentRestrictedUser(User $identity): bool
+    {
+        if ($identity->hasRole([User::ROLE_ADMIN, User::ROLE_OFFICER, User::ROLE_DIRECTOR])) {
+            return false;
+        }
+
+        return in_array($identity->role, [
+            User::ROLE_GENERAL_USER,
+            User::ROLE_STAFF,
+            User::ROLE_DEPUTY_DIRECTOR,
+        ], true);
+    }
+
     private function canView(Memo $memo, User $identity): bool
     {
-        if ($identity->hasRole([User::ROLE_ADMIN, User::ROLE_OFFICER, User::ROLE_DEPUTY_DIRECTOR, User::ROLE_DIRECTOR])) {
+        if ($identity->hasRole(User::ROLE_ADMIN)) {
             return true;
         }
+
         if ((int) $memo->created_by === (int) $identity->id || (int) $memo->current_actor_id === (int) $identity->id) {
             return true;
         }
 
-        return $identity->role === User::ROLE_STAFF
-            && $identity->department_id !== null
-            && $memo->department_id !== null
-            && (int) $identity->department_id === (int) $memo->department_id;
+        // หากเป็นฉบับร่าง คนอื่นที่ไม่ใช่ผู้สร้างและ Admin จะไม่เห็น
+        if ($memo->status === Memo::STATUS_DRAFT) {
+            return false;
+        }
+
+        if (!$this->isDepartmentRestrictedUser($identity)) {
+            return true;
+        }
+
+        $myDeptIds = $identity->departmentIds();
+        if ($memo->department_id !== null && in_array((int) $memo->department_id, $myDeptIds, true)) {
+            return true;
+        }
+
+        return false;
     }
 
     private function applyVisibilityScope(ActiveQuery $query, User $identity): void
     {
-        if ($identity->hasRole([User::ROLE_ADMIN, User::ROLE_OFFICER, User::ROLE_DEPUTY_DIRECTOR, User::ROLE_DIRECTOR])) {
+        if (!$this->isDepartmentRestrictedUser($identity)) {
             return;
         }
 
-        if ($identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
+        $myDeptIds = $identity->departmentIds();
+
+        if (!empty($myDeptIds)) {
+            $query->andWhere([
+                'or',
+                [
+                    'and',
+                    ['{{%memo}}.[[department_id]]' => $myDeptIds],
+                    ['not in', '{{%memo}}.[[status]]', [Memo::STATUS_DRAFT]],
+                ],
+                ['{{%memo}}.[[created_by]]' => $identity->id],
+                ['{{%memo}}.[[current_actor_id]]' => $identity->id],
+            ]);
+        } else {
             $query->andWhere([
                 'or',
                 ['{{%memo}}.[[created_by]]' => $identity->id],
                 ['{{%memo}}.[[current_actor_id]]' => $identity->id],
-                ['{{%memo}}.[[department_id]]' => $identity->department_id],
             ]);
-            return;
         }
-
-        $query->andWhere([
-            'or',
-            ['{{%memo}}.[[created_by]]' => $identity->id],
-            ['{{%memo}}.[[current_actor_id]]' => $identity->id],
-        ]);
     }
 
     private function applyMyScope(ActiveQuery $query, User $identity): void
@@ -610,11 +744,38 @@ class MemoController extends Controller
             return;
         }
 
-        $query->andWhere([
+        $conditions = [
             'or',
             ['{{%memo}}.[[current_actor_id]]' => $identity->id],
             ['and', ['{{%memo}}.[[created_by]]' => $identity->id], ['{{%memo}}.[[status]]' => [Memo::STATUS_DRAFT, Memo::STATUS_RETURNED, Memo::STATUS_APPROVED]]],
-        ]);
+        ];
+
+        // หากเป็น ผอ. หรือ รักษาราชการแทน ผอ. ให้เห็นบันทึกข้อความทั้งหมดที่อยู่ในสถานะ "รอ ผอ.พิจารณา"
+        $isActingDirector = SystemSetting::isActingDirector() && (int) $identity->id === (int) SystemSetting::getActingDirectorUserId();
+        if ($identity->role === User::ROLE_DIRECTOR || $isActingDirector) {
+            $conditions[] = ['{{%memo}}.[[status]]' => Memo::STATUS_SUBMITTED_TO_DIRECTOR];
+        }
+
+        // หากเป็น รอง ผอ. ให้เห็นบันทึกข้อความทั้งหมดที่อยู่ในสถานะ "รอรอง ผอ.พิจารณา" เฉพาะกลุ่มงานที่กำกับดูแล
+        if ($identity->role === User::ROLE_DEPUTY_DIRECTOR) {
+            $myDepts = $identity->departmentIds();
+            if (!empty($myDepts)) {
+                $conditions[] = ['and', ['{{%memo}}.[[status]]' => Memo::STATUS_SUBMITTED_TO_DEPUTY], ['{{%memo}}.[[department_id]]' => $myDepts]];
+            } else {
+                $conditions[] = ['{{%memo}}.[[status]]' => Memo::STATUS_SUBMITTED_TO_DEPUTY];
+            }
+        }
+
+        // หากเป็น หัวหน้ากลุ่มงาน หรือ เจ้าหน้าที่ ให้เห็นบันทึกข้อความที่อยู่ในสถานะ "รอหัวหน้ากลุ่มงาน/เจ้าหน้าที่ตรวจทาน"
+        if ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_OFFICER) {
+            if ($identity->department_id !== null) {
+                $conditions[] = ['and', ['{{%memo}}.[[status]]' => Memo::STATUS_SUBMITTED_TO_STAFF], ['or', ['{{%memo}}.[[department_id]]' => $identity->department_id], ['{{%memo}}.[[department_id]]' => null]]];
+            } else {
+                $conditions[] = ['{{%memo}}.[[status]]' => Memo::STATUS_SUBMITTED_TO_STAFF];
+            }
+        }
+
+        $query->andWhere($conditions);
     }
 
     private function applyKeyword(ActiveQuery $query, string $keyword): void

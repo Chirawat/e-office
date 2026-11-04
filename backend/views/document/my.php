@@ -17,11 +17,15 @@ use yii\helpers\Url;
 /** @var string $roleLabel */
 /** @var int $unreadDocCount */
 /** @var int $unreadMemoCount */
+/** @var int|null $docPendingCount */
+/** @var int|null $memoPendingCount */
 /** @var array<int, bool> $readDocMap */
 /** @var array<int, bool> $readMemoMap */
 
 $unreadDocCount = $unreadDocCount ?? 0;
 $unreadMemoCount = $unreadMemoCount ?? 0;
+$docPendingCount = $docPendingCount ?? (int) $docDataProvider->getTotalCount();
+$memoPendingCount = $memoPendingCount ?? (int) $memoDataProvider->getTotalCount();
 $readDocMap = $readDocMap ?? [];
 $readMemoMap = $readMemoMap ?? [];
 
@@ -234,14 +238,24 @@ $memoStatusBadge = static function (Memo $model): string {
                     <button class="nav-link erp-nav-tab py-2 px-3 active fw-bold d-inline-flex align-items-center gap-2 small" id="doc-tab-btn" data-bs-toggle="tab" data-bs-target="#tab-doc" type="button" role="tab" aria-controls="tab-doc" aria-selected="true">
                         <i class="bi bi-inbox-fill text-primary"></i>
                         <span>หนังสือเข้า</span>
-                        <span class="tab-badge <?= $unreadDocCount > 0 ? 'bg-primary text-white' : '' ?>" title="จำนวนหนังสือเข้าที่ยังไม่ได้เปิดอ่าน"><?= $unreadDocCount ?></span>
+                        <span class="tab-badge <?= $docPendingCount > 0 ? 'bg-primary text-white' : '' ?>" title="งานคงค้าง <?= $docPendingCount ?> เรื่อง (ยังไม่อ่าน <?= $unreadDocCount ?> เรื่อง)">
+                            <?= $docPendingCount ?>
+                        </span>
+                        <?php if ($unreadDocCount > 0): ?>
+                            <span class="badge rounded-pill bg-danger" style="font-size: 0.65rem; padding: 2px 6px;" title="ยังไม่อ่าน <?= $unreadDocCount ?> เรื่อง">ใหม่ <?= $unreadDocCount ?></span>
+                        <?php endif; ?>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link erp-nav-tab py-2 px-3 fw-bold d-inline-flex align-items-center gap-2 small" id="memo-tab-btn" data-bs-toggle="tab" data-bs-target="#tab-memo" type="button" role="tab" aria-controls="tab-memo" aria-selected="false">
                         <i class="bi bi-journal-bookmark-fill text-teal" style="color: #0f766e;"></i>
                         <span>บันทึกข้อความ</span>
-                        <span class="tab-badge <?= $unreadMemoCount > 0 ? 'bg-success text-white' : '' ?>" title="จำนวนบันทึกข้อความที่ยังไม่ได้เปิดอ่าน"><?= $unreadMemoCount ?></span>
+                        <span class="tab-badge <?= $memoPendingCount > 0 ? 'bg-success text-white' : '' ?>" title="งานคงค้าง <?= $memoPendingCount ?> เรื่อง (ยังไม่อ่าน <?= $unreadMemoCount ?> เรื่อง)">
+                            <?= $memoPendingCount ?>
+                        </span>
+                        <?php if ($unreadMemoCount > 0): ?>
+                            <span class="badge rounded-pill bg-danger" style="font-size: 0.65rem; padding: 2px 6px;" title="ยังไม่อ่าน <?= $unreadMemoCount ?> เรื่อง">ใหม่ <?= $unreadMemoCount ?></span>
+                        <?php endif; ?>
                     </button>
                 </li>
             </ul>
@@ -286,13 +300,22 @@ $memoStatusBadge = static function (Memo $model): string {
 
                                     <!-- Mail Content Body -->
                                     <div class="apple-mail-body">
-                                        <!-- Line 1: Sender Name + Date (Apple Mail header style) -->
+                                        <!-- Line 1: Sender Name + Status Badge + Date (Apple Mail header style) -->
                                         <div class="apple-mail-header">
                                             <div class="apple-mail-sender">
                                                 <?= Html::encode($senderText) ?>
                                             </div>
-                                            <div class="apple-mail-date">
-                                                <?= $thaiDate($doc->receive_date) ?>
+                                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                                <?php
+                                                $docStatusLabel = Document::statusOptions()[$doc->status] ?? $doc->status;
+                                                $docStatusClass = 'status-badge-' . str_replace('_', '-', $doc->status);
+                                                ?>
+                                                <span class="status-badge <?= Html::encode($docStatusClass) ?>" style="font-size: 0.72rem; padding: 2px 8px; min-height: 22px; line-height: 1.2;">
+                                                    <?= Html::encode($docStatusLabel) ?>
+                                                </span>
+                                                <div class="apple-mail-date">
+                                                    <?= $thaiDate($doc->receive_date) ?>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -369,7 +392,7 @@ $memoStatusBadge = static function (Memo $model): string {
 
                                     <!-- Mail Content Body -->
                                     <div class="apple-mail-body">
-                                        <!-- Line 1: Sender Name + Date (Apple Mail header style) -->
+                                        <!-- Line 1: Sender Name + Status Badge + Date (Apple Mail header style) -->
                                         <div class="apple-mail-header">
                                             <div class="apple-mail-sender">
                                                 <?= Html::encode($senderName) ?>
@@ -377,15 +400,23 @@ $memoStatusBadge = static function (Memo $model): string {
                                                     <span class="badge bg-light text-secondary border fw-normal py-0 px-1 ms-1" style="font-size: 0.7rem;">คุณ</span>
                                                 <?php endif; ?>
                                             </div>
-                                            <div class="apple-mail-date">
-                                                <?= $thaiDate($memo->memo_date) ?>
+                                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                                <?php
+                                                $memoStatusLabel = Memo::statusOptions()[$memo->status] ?? $memo->status;
+                                                $memoStatusClass = 'status-badge-' . str_replace('_', '-', $memo->status);
+                                                ?>
+                                                <span class="status-badge <?= Html::encode($memoStatusClass) ?>" style="font-size: 0.72rem; padding: 2px 8px; min-height: 22px; line-height: 1.2;">
+                                                    <?= Html::encode($memoStatusLabel) ?>
+                                                </span>
+                                                <div class="apple-mail-date">
+                                                    <?= $thaiDate($memo->memo_date) ?>
+                                                </div>
                                             </div>
                                         </div>
 
                                         <!-- Line 2: Subject (Unread: ตัวหนา / Read: ตัวปกติสีเทา) -->
                                         <div class="apple-mail-subject <?= $isMemoRead ? 'is-read fw-normal text-muted' : 'is-unread fw-bold text-dark' ?>">
-                                            <?= $memoStatusBadge($memo) ?>
-                                            <span class="ms-1"><?= Html::encode($memo->subject) ?></span>
+                                            <?= Html::encode($memo->subject) ?>
                                         </div>
 
                                         <!-- Line 3: Snippet / Summary text (เลขที่บันทึก, ผู้รับเรื่องปัจจุบัน) -->
