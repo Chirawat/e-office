@@ -277,12 +277,12 @@ class DocumentController extends Controller
         $unreadDocQuery = (clone $docQuery)
             ->leftJoin('{{%document_read}}', '{{%document_read}}.[[document_id]] = {{%document}}.[[id]] AND {{%document_read}}.[[user_id]] = :uid', [':uid' => $identity->id])
             ->andWhere(['{{%document_read}}.[[id]]' => null]);
-        $unreadDocCount = (int) $unreadDocQuery->count('DISTINCT {{%document}}.[[id]]');
+        $unreadDocCount = (int) $unreadDocQuery->count();
 
         $unreadMemoQuery = (clone $memoQuery)
             ->leftJoin('{{%memo_read}}', '{{%memo_read}}.[[memo_id]] = {{%memo}}.[[id]] AND {{%memo_read}}.[[user_id]] = :uid', [':uid' => $identity->id])
             ->andWhere(['{{%memo_read}}.[[id]]' => null]);
-        $unreadMemoCount = (int) $unreadMemoQuery->count('DISTINCT {{%memo}}.[[id]]');
+        $unreadMemoCount = (int) $unreadMemoQuery->count();
 
         $readDocIds = DocumentRead::find()
             ->select('document_id')
