@@ -87,16 +87,15 @@ class DocumentController extends Controller
 
         if ($identity instanceof User && !$identity->hasRole(User::ROLE_ADMIN)) {
             if ($identity->hasRole(User::ROLE_DEPUTY_DIRECTOR)) {
-                $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DEPUTY, Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_RETURNED]]);
-                $countQuery->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DEPUTY, Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_RETURNED]]);
-                $isActing = SystemSetting::isActingDirector() && (int) $identity->id === SystemSetting::getActingDirectorUserId();
-                if (!$isActing && $identity->role === User::ROLE_DEPUTY_DIRECTOR) {
-                    $myDepts = $identity->departmentIds();
-                    if ($myDepts !== []) {
-                        $query->andWhere(['{{%document}}.[[department_id]]' => $myDepts]);
-                        $countQuery->andWhere(['{{%document}}.[[department_id]]' => $myDepts]);
-                    }
-                }
+                $deputyStatuses = [
+                    Document::STATUS_SUBMITTED_TO_DEPUTY,
+                    Document::STATUS_SUBMITTED_TO_DIRECTOR,
+                    Document::STATUS_ASSIGNED,
+                    Document::STATUS_COMPLETED,
+                    Document::STATUS_RETURNED,
+                ];
+                $query->andWhere(['{{%document}}.[[status]]' => $deputyStatuses]);
+                $countQuery->andWhere(['{{%document}}.[[status]]' => $deputyStatuses]);
             } elseif ($identity->hasRole(User::ROLE_DIRECTOR)) {
                 $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
                 $countQuery->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
@@ -208,11 +207,6 @@ class DocumentController extends Controller
 
         if ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
             $this->applyStaffAssignmentScope($docQuery, $identity);
-        } elseif ($identity->role === User::ROLE_DEPUTY_DIRECTOR && !(SystemSetting::isActingDirector() && (int)$identity->id === (int)SystemSetting::getActingDirectorUserId())) {
-            $deptIds = $identity->departmentIds();
-            if (!empty($deptIds)) {
-                $docQuery->andWhere(['or', ['{{%document}}.[[department_id]]' => $deptIds], ['{{%document}}.[[department_id]]' => null]]);
-            }
         }
 
         if ($keyword !== '') {
@@ -847,14 +841,9 @@ class DocumentController extends Controller
             $conditions[] = ['status' => Memo::STATUS_SUBMITTED_TO_DIRECTOR];
         }
 
-        // หากเป็น รอง ผอ. ให้เห็นบันทึกข้อความทั้งหมดที่อยู่ในสถานะ "รอรอง ผอ.พิจารณา" เฉพาะกลุ่มงานที่กำกับดูแล
+        // หากเป็น รอง ผอ. ให้เห็นบันทึกข้อความทั้งหมดที่อยู่ในสถานะ "รอรอง ผอ.พิจารณา"
         if ($identity->role === User::ROLE_DEPUTY_DIRECTOR) {
-            $myDepts = $identity->departmentIds();
-            if (!empty($myDepts)) {
-                $conditions[] = ['and', ['status' => Memo::STATUS_SUBMITTED_TO_DEPUTY], ['department_id' => $myDepts]];
-            } else {
-                $conditions[] = ['status' => Memo::STATUS_SUBMITTED_TO_DEPUTY];
-            }
+            $conditions[] = ['status' => Memo::STATUS_SUBMITTED_TO_DEPUTY];
         }
 
         // หากเป็น หัวหน้ากลุ่มงาน หรือ เจ้าหน้าที่ ให้เห็นบันทึกข้อความที่อยู่ในสถานะ "รอหัวหน้ากลุ่มงาน/เจ้าหน้าที่ตรวจทาน"
