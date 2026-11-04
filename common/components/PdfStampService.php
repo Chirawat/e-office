@@ -7,6 +7,7 @@ namespace common\components;
 use common\models\Document;
 use common\models\DocumentFile;
 use common\models\DocumentStamp;
+use common\models\SystemSetting;
 use common\models\User;
 use setasign\Fpdi\Tcpdf\Fpdi;
 use Yii;
@@ -169,14 +170,14 @@ class PdfStampService extends Component
         $deputyComment = $this->stampContent($deputyStamp);
         if ($deputyComment !== null) {
             $position = $this->stampPosition($document, DocumentStamp::TYPE_DEPUTY_COMMENT, $pageWidth - 82, min(170, $pageHeight - 120), $pageWidth, $pageHeight);
-            $this->drawBlueNote($pdf, 'เรียน ผู้อำนวยการ', $deputyComment, $position['x'], $position['y'], 68, $this->signaturePathForStamp($deputyStamp), self::DEPUTY_NOTE_LAYOUT);
+            $this->drawBlueNote($pdf, 'เรียน ผู้อำนวยการ', $deputyComment, $position['x'], $position['y'], 68, $deputyStamp, self::DEPUTY_NOTE_LAYOUT, 'deputy');
         }
 
         $directorStamp = $this->latestStamp($document, DocumentStamp::TYPE_DIRECTOR_ORDER);
         $directorOrder = $this->stampContent($directorStamp);
         if ($directorOrder !== null) {
             $position = $this->stampPosition($document, DocumentStamp::TYPE_DIRECTOR_ORDER, $pageWidth - 78, max(230, $pageHeight - 82), $pageWidth, $pageHeight);
-            $this->drawBlueNote($pdf, 'ทราบ', $directorOrder, $position['x'], $position['y'], 64, $this->signaturePathForStamp($directorStamp), self::DIRECTOR_NOTE_LAYOUT);
+            $this->drawBlueNote($pdf, 'ทราบ', $directorOrder, $position['x'], $position['y'], 64, $directorStamp, self::DIRECTOR_NOTE_LAYOUT, 'director');
         }
     }
 
@@ -230,7 +231,7 @@ class PdfStampService extends Component
         $pdf->Cell($w - 4, $line, 'งานธุรการ', 0, 2, 'L');
     }
 
-    private function drawBlueNote(Fpdi $pdf, string $title, string $content, float $x, float $y, float $w, ?string $signaturePath = null, array $layout = []): void
+    private function drawBlueNote(Fpdi $pdf, string $title, string $content, float $x, float $y, float $w, ?DocumentStamp $stamp = null, array $layout = [], string $context = 'deputy'): void
     {
         $pdf->SetTextColor(37, 60, 155);
         $pdf->SetDrawColor(37, 60, 155);
@@ -238,25 +239,75 @@ class PdfStampService extends Component
         $pdf->SetXY($x, $y);
         $pdf->Cell($w, 6, $title, 0, 2, 'L');
         $pdf->SetFont('freeserif', '', 10.5);
-        $pdf->MultiCell($w, 5.4, $content, 0, 'L', false, 1, $x, $pdf->GetY());
+        $pdf->MultiCell($w, 5.2, $content, 0, 'L', false, 1, $x, $pdf->GetY());
         $contentBottomY = $pdf->GetY();
-        if (self::SHOW_NOTE_DEBUG_FRAMES) {
-            $this->drawNoteDebugFrame($pdf, $x, $y, $w, $contentBottomY, $layout);
-        }
-        $dateY = $contentBottomY + (float) ($layout['date_y_offset_without_signature'] ?? 0);
+
+        $signaturePath = $this->signaturePathForStamp($stamp);
+        $signatureWidth = (float) ($layout['signature_width'] ?? self::NOTE_SIGNATURE_WIDTH);
+        $signatureHeight = (float) ($layout['signature_height'] ?? self::NOTE_SIGNATURE_HEIGHT);
+        $signatureX = $x + (float) ($layout['signature_x_offset'] ?? (($w - $signatureWidth) / 2));
+        $signatureY = $contentBottomY + (float) ($layout['signature_y_offset'] ?? 1);
+
         if ($signaturePath !== null) {
-            $signatureWidth = (float) ($layout['signature_width'] ?? ($w * 0.5));
-            $signatureHeight = (float) ($layout['signature_height'] ?? 14.0);
-            $signatureX = $x + (float) ($layout['signature_x_offset'] ?? ($w * 0.38));
-            $signatureY = $contentBottomY + (float) ($layout['signature_y_offset'] ?? 1);
             [$imageX, $imageY, $imageWidth, $imageHeight] = $this->containedImageBox($signaturePath, $signatureX, $signatureY, $signatureWidth, $signatureHeight);
             $pdf->Image($signaturePath, $imageX, $imageY, $imageWidth, $imageHeight, '', '', '', false, 300);
-            $dateY = $signatureY + (float) ($layout['date_y_offset'] ?? 13);
+            $currentY = $signatureY + $signatureHeight + 0.5;
+        } else {
+            $currentY = $contentBottomY + 2.0;
         }
-        $pdf->SetFont('freeserif', 'I', 9.5);
-        [$dateX, $dateWidth, $dateAlign] = $this->dateLayout($x, $w, $layout);
-        $pdf->SetXY($dateX, $dateY);
-        $pdf->Cell($dateWidth, 5.2, $this->buddhistDate('now'), 0, 2, $dateAlign);
+
+        // หาผู้ลงนาม
+        $user = ($stamp && $stamp->created_by) ? User::findOne((int) $stamp->created_by) : null;
+        $schoolName = (string) SystemSetting::get(SystemSetting::KEY_SCHOOL_NAME, 'โรงเรียนกุดชุมวิทยาคม');
+
+        // 1. ชื่อ
+        $rawName = '';
+        if ($user) {
+            $rawName = $user->displayName();
+        } elseif ($context === 'director') {
+            $rawName = SystemSetting::isActingDirector()
+                ? (string) SystemSetting::get(SystemSetting::KEY_ACTING_DIRECTOR_NAME)
+                : (string) SystemSetting::get(SystemSetting::KEY_DIRECTOR_NAME);
+        }
+        $nameText = $rawName !== '' ? '(' . trim($rawName, "() \t\n\r\0\x0B") . ')' : '';
+
+        // 2. ตำแหน่ง
+        $posText = '';
+        if ($user) {
+            $posText = $user->officialPosition($context);
+        } elseif ($context === 'director') {
+            $posText = SystemSetting::isActingDirector()
+                ? (string) SystemSetting::get(SystemSetting::KEY_ACTING_DIRECTOR_POSITION, 'รองผู้อำนวยการ รักษาการในตำแหน่งผู้อำนวยการ' . $schoolName)
+                : (string) SystemSetting::get(SystemSetting::KEY_DIRECTOR_POSITION, 'ผู้อำนวยการ' . $schoolName);
+        } elseif ($context === 'deputy') {
+            $posText = 'รองผู้อำนวยการ' . $schoolName;
+        }
+
+        // 3. วันที่
+        $dateText = $this->buddhistDate($stamp?->created_at ?? 'now');
+
+        $pdf->SetTextColor(37, 60, 155);
+
+        // 1. ชื่อ
+        if ($nameText !== '') {
+            $pdf->SetFont('freeserif', 'B', 9.5);
+            $pdf->SetXY($x, $currentY);
+            $pdf->Cell($w, 4.3, $nameText, 0, 2, 'C');
+            $currentY += 4.3;
+        }
+
+        // 2. ตำแหน่ง
+        if ($posText !== '') {
+            $pdf->SetFont('freeserif', '', 8.5);
+            $pdf->SetXY($x, $currentY);
+            $pdf->Cell($w, 4.0, $posText, 0, 2, 'C');
+            $currentY += 4.0;
+        }
+
+        // 3. วันที่
+        $pdf->SetFont('freeserif', '', 8.5);
+        $pdf->SetXY($x, $currentY);
+        $pdf->Cell($w, 4.0, $dateText, 0, 2, 'C');
     }
 
     private function drawNoteDebugFrame(Fpdi $pdf, float $x, float $y, float $w, float $contentBottomY, array $layout): void
@@ -324,11 +375,15 @@ class PdfStampService extends Component
         return [$imageX, $imageY, $imageWidth, $imageHeight];
     }
 
-    private function buddhistDate(string $date): string
+    private function buddhistDate(int|string|null $date): string
     {
-        $timestamp = $date === 'now' ? time() : strtotime($date);
+        if ($date === null || $date === '' || $date === 'now') {
+            $timestamp = time();
+        } else {
+            $timestamp = is_numeric($date) ? (int) $date : strtotime((string) $date);
+        }
         if ($timestamp === false) {
-            return $date;
+            return (string) $date;
         }
 
         $thaiShortMonths = [

@@ -165,33 +165,51 @@ class MemoPdfService extends Component
         $frameWidth = (float) ($position['w'] ?? self::SIGNATURE_WIDTH);
         $frameHeight = (float) ($position['h'] ?? self::SIGNATURE_HEIGHT);
         $x = min(max((float) $position['x'], 0), max(0, $pageWidth - $frameWidth));
-        $y = min(max((float) $position['y'], 0), max(0, $pageHeight - 28));
+        $y = min(max((float) $position['y'], 0), max(0, $pageHeight - 32));
         $signatureWidth = self::SIGNATURE_IMAGE_WIDTH;
         $signatureHeight = self::SIGNATURE_IMAGE_HEIGHT;
         $signatureX = $x + max(0, ($frameWidth - $signatureWidth) / 2);
-        $dateWidth = $compact ? 30.0 : 34.0;
-        $dateX = $signatureX + (($signatureWidth - $dateWidth) / 2);
         $signaturePath = $this->signaturePath($user);
-        $dateY = $y + $signatureHeight + ($compact ? 0.9 : 1.2);
 
         if (self::SHOW_SIGNATURE_DEBUG_FRAMES) {
-            $this->drawDebugFrame($pdf, $x, $y, $frameWidth, $frameHeight, $dateX, $dateY, $dateWidth, $position['label']);
+            $this->drawDebugFrame($pdf, $x, $y, $frameWidth, $frameHeight, $x, $y + $signatureHeight, $frameWidth, $position['label']);
         }
 
         if ($signaturePath !== null) {
             [$imageX, $imageY, $imageWidth, $imageHeight] = $this->containedImageBox($signaturePath, $signatureX, $y, $signatureWidth, $signatureHeight);
             $pdf->Image($signaturePath, $imageX, $imageY, $imageWidth, $imageHeight, '', '', '', false, 300);
+            $currentY = $y + $signatureHeight + 0.5;
         } else {
-            $pdf->SetTextColor(37, 60, 155);
-            $pdf->SetFont('freeserif', 'B', 10.5);
-            $pdf->SetXY($signatureX, $y + ($signatureHeight / 2) - 2.5);
-            $pdf->Cell($signatureWidth, 5, $user ? $user->displayName() : '', 0, 2, 'C');
+            $currentY = $y + 4.0;
         }
 
+        // วาด ชื่อ \n ตำแหน่ง \n วันที่
         $pdf->SetTextColor(37, 60, 155);
-        $pdf->SetFont('freeserif', '', 9.5);
-        $pdf->SetXY($dateX, $dateY);
-        $pdf->Cell($dateWidth, 5.2, $this->buddhistDate($createdAt), 0, 2, 'C');
+
+        // 1. ชื่อ
+        $rawName = $user ? $user->displayName() : '';
+        $nameText = $rawName !== '' ? '(' . trim($rawName, "() \t\n\r\0\x0B") . ')' : '';
+        if ($nameText !== '') {
+            $pdf->SetFont('freeserif', 'B', 9.5);
+            $pdf->SetXY($x, $currentY);
+            $pdf->Cell($frameWidth, 4.3, $nameText, 0, 2, 'C');
+            $currentY += 4.3;
+        }
+
+        // 2. ตำแหน่ง
+        $posText = $user ? $user->officialPosition('creator') : '';
+        if ($posText !== '') {
+            $pdf->SetFont('freeserif', '', 8.5);
+            $pdf->SetXY($x, $currentY);
+            $pdf->Cell($frameWidth, 4.0, $posText, 0, 2, 'C');
+            $currentY += 4.0;
+        }
+
+        // 3. วันที่
+        $dateText = $this->buddhistDate($createdAt);
+        $pdf->SetFont('freeserif', '', 8.5);
+        $pdf->SetXY($x, $currentY);
+        $pdf->Cell($frameWidth, 4.0, $dateText, 0, 2, 'C');
     }
 
     /**
@@ -200,40 +218,71 @@ class MemoPdfService extends Component
     private function drawApprovalNote(Fpdi $pdf, MemoAction $action, array $position, float $pageWidth, float $pageHeight): void
     {
         $x = min(max((float) $position['x'], 0), max(0, $pageWidth - 72));
-        $y = min(max((float) $position['y'], 0), max(0, $pageHeight - 44));
+        $y = min(max((float) $position['y'], 0), max(0, $pageHeight - 48));
         $w = (float) ($position['w'] ?? 68.0);
         $h = (float) ($position['h'] ?? 38.0);
         $signatureWidth = self::SIGNATURE_IMAGE_WIDTH;
         $signatureHeight = self::SIGNATURE_IMAGE_HEIGHT;
         $signatureX = $x + max(0, ($w - $signatureWidth) / 2);
-        $signatureY = $y + 9.0;
-        $dateWidth = 34.0;
-        $dateX = $signatureX + (($signatureWidth - $dateWidth) / 2);
+        $signatureY = $y + 7.5;
         $signaturePath = $this->signaturePath($action->actor);
-        $dateY = $signatureY + $signatureHeight + 0.6;
 
         if (self::SHOW_SIGNATURE_DEBUG_FRAMES) {
-            $this->drawDebugFrame($pdf, $x, $y, $w, $h, $dateX, $dateY, $dateWidth, $position['label']);
+            $this->drawDebugFrame($pdf, $x, $y, $w, $h, $x, $signatureY + $signatureHeight, $w, $position['label']);
         }
 
         $pdf->SetTextColor(37, 60, 155);
-        $pdf->SetFont('freeserif', '', 10.5);
+        $pdf->SetFont('freeserif', '', 10.0);
         $pdf->SetXY($x, $y);
-        $pdf->MultiCell($w, 5.2, $action->comment ?: '-', 0, 'L', false, 1, $x, $y);
+        $pdf->MultiCell($w, 4.8, $action->comment ?: '-', 0, 'L', false, 1, $x, $y);
+
+        $signatureY = max($signatureY, $pdf->GetY() + 0.5);
 
         if ($signaturePath !== null) {
             [$imageX, $imageY, $imageWidth, $imageHeight] = $this->containedImageBox($signaturePath, $signatureX, $signatureY, $signatureWidth, $signatureHeight);
             $pdf->Image($signaturePath, $imageX, $imageY, $imageWidth, $imageHeight, '', '', '', false, 300);
+            $currentY = $signatureY + $signatureHeight + 0.5;
         } else {
-            $pdf->SetTextColor(37, 60, 155);
-            $pdf->SetFont('freeserif', 'B', 10.5);
-            $pdf->SetXY($signatureX, $signatureY + ($signatureHeight / 2) - 2.5);
-            $pdf->Cell($signatureWidth, 5, $action->actor ? $action->actor->displayName() : '', 0, 2, 'C');
+            $currentY = $pdf->GetY() + 2.0;
         }
 
-        $pdf->SetFont('freeserif', '', 9.5);
-        $pdf->SetXY($dateX, $dateY);
-        $pdf->Cell($dateWidth, 5.2, $this->buddhistDate($action->created_at), 0, 2, 'C');
+        // กำหนด context ตำแหน่งตามประเภท action
+        $context = 'staff';
+        if ($action->action === MemoStampPosition::TYPE_DEPUTY_REVIEW || str_contains($action->action, 'deputy')) {
+            $context = 'deputy';
+        } elseif ($action->action === MemoStampPosition::TYPE_DIRECTOR_APPROVE || str_contains($action->action, 'director')) {
+            $context = 'director';
+        }
+
+        // วาด ชื่อ \n ตำแหน่ง \n วันที่
+        $rawName = $action->actor ? $action->actor->displayName() : '';
+        $nameText = $rawName !== '' ? '(' . trim($rawName, "() \t\n\r\0\x0B") . ')' : '';
+
+        $posText = $action->actor ? $action->actor->officialPosition($context) : '';
+        $dateText = $this->buddhistDate($action->created_at);
+
+        $pdf->SetTextColor(37, 60, 155);
+
+        // 1. ชื่อ
+        if ($nameText !== '') {
+            $pdf->SetFont('freeserif', 'B', 9.5);
+            $pdf->SetXY($x, $currentY);
+            $pdf->Cell($w, 4.3, $nameText, 0, 2, 'C');
+            $currentY += 4.3;
+        }
+
+        // 2. ตำแหน่ง
+        if ($posText !== '') {
+            $pdf->SetFont('freeserif', '', 8.5);
+            $pdf->SetXY($x, $currentY);
+            $pdf->Cell($w, 4.0, $posText, 0, 2, 'C');
+            $currentY += 4.0;
+        }
+
+        // 3. วันที่
+        $pdf->SetFont('freeserif', '', 8.5);
+        $pdf->SetXY($x, $currentY);
+        $pdf->Cell($w, 4.0, $dateText, 0, 2, 'C');
     }
 
     /**

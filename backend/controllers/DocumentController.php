@@ -368,11 +368,17 @@ class DocumentController extends Controller
         }
 
         $staffQuery = User::find()
-            ->where(['status' => User::STATUS_ACTIVE, 'role' => User::ROLE_GENERAL_USER])
-            ->orderBy(['username' => SORT_ASC]);
-        if ($identity instanceof User && $identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
-            $staffQuery->joinWith('userDepartments')
-                ->andWhere(['user_department.department_id' => $identity->department_id])
+            ->where(['status' => User::STATUS_ACTIVE, 'role' => [User::ROLE_GENERAL_USER, User::ROLE_OFFICER]])
+            ->orderBy([new \yii\db\Expression("COALESCE(NULLIF(fullname, ''), username) ASC")]);
+
+        $targetDeptId = ($identity instanceof User && $identity->role === User::ROLE_STAFF) ? $identity->department_id : $model->department_id;
+        if ($targetDeptId !== null) {
+            $staffQuery->leftJoin('user_department', 'user_department.user_id = {{%user}}.id')
+                ->andWhere([
+                    'or',
+                    ['{{%user}}.department_id' => $targetDeptId],
+                    ['user_department.department_id' => $targetDeptId],
+                ])
                 ->distinct();
         }
 
@@ -575,7 +581,7 @@ class DocumentController extends Controller
         $instruction = trim((string) Yii::$app->request->post('instruction'));
         $staff = User::find()
             ->with('departments')
-            ->where(['id' => $assignedTo, 'status' => User::STATUS_ACTIVE, 'role' => User::ROLE_GENERAL_USER])
+            ->where(['id' => $assignedTo, 'status' => User::STATUS_ACTIVE, 'role' => [User::ROLE_GENERAL_USER, User::ROLE_OFFICER]])
             ->one();
         if ($staff === null) {
             Yii::$app->session->setFlash('error', 'กรุณาเลือกผู้ปฏิบัติที่ยังใช้งานอยู่');

@@ -193,6 +193,49 @@ class User extends ActiveRecord implements IdentityInterface
         return $base;
     }
 
+    public function officialPosition(?string $context = null): string
+    {
+        $schoolName = (string) SystemSetting::get(SystemSetting::KEY_SCHOOL_NAME, 'โรงเรียนกุดชุมวิทยาคม');
+
+        // กรณีรักษาการแทน ผอ.
+        $isActing = SystemSetting::isActingDirector() && (int) $this->id === (int) SystemSetting::getActingDirectorUserId();
+        if ($isActing || ($context === 'director' && $isActing)) {
+            $actingPos = (string) SystemSetting::get(SystemSetting::KEY_ACTING_DIRECTOR_POSITION);
+            if ($actingPos !== '') {
+                return $actingPos;
+            }
+            return 'รองผู้อำนวยการ รักษาการในตำแหน่งผู้อำนวยการ' . $schoolName;
+        }
+
+        if ($this->role === self::ROLE_DIRECTOR || $context === 'director') {
+            $directorPos = (string) SystemSetting::get(SystemSetting::KEY_DIRECTOR_POSITION);
+            if ($directorPos !== '') {
+                return $directorPos;
+            }
+            return 'ผู้อำนวยการ' . $schoolName;
+        }
+
+        if ($this->role === self::ROLE_DEPUTY_DIRECTOR || $context === 'deputy') {
+            return 'รองผู้อำนวยการ' . $schoolName;
+        }
+
+        if ($this->role === self::ROLE_STAFF || $context === 'staff') {
+            if ($this->department !== null) {
+                $dName = $this->department->name;
+                $prefix = str_starts_with($dName, 'กลุ่ม') ? 'หัวหน้า' : (str_starts_with($dName, 'บริหาร') ? 'หัวหน้ากลุ่ม' : 'หัวหน้ากลุ่มบริหารงาน');
+                return $prefix . $dName;
+            }
+            return 'หัวหน้ากลุ่มงาน';
+        }
+
+        if ($this->role === self::ROLE_OFFICER) {
+            return 'เจ้าหน้าที่งานสารบรรณ';
+        }
+
+        // ผู้ใช้งานทั่วไป (ครู/บุคลากร)
+        return 'ครู ' . $schoolName;
+    }
+
     public function hasRole(string|array $roles): bool
     {
         if ($this->role === self::ROLE_ADMIN) {

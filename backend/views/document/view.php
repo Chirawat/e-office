@@ -165,7 +165,7 @@ $canCompleteAssignment = $identity instanceof User
             && (int) $identity->department_id === (int) $latestAssignment->department_id
         )
     );
-$staffItems = ArrayHelper::map($staffUsers, 'id', 'username');
+$staffItems = ArrayHelper::map($staffUsers, 'id', static fn (User $user): string => $user->displayName());
 $showStampPositionTools = true;
 $canAdjustStampPositions = $showStampPositionTools && $model->status === Document::STATUS_REGISTERED && $canRegisterDocument;
 $useBrowserPdfPreview = $previewImageUrl === null && $previewPdfUrl !== null && $canAdjustStampPositions;
@@ -358,7 +358,7 @@ if ($previewPdfUrl) {
                     <div><dt>จาก</dt><dd><?= Html::encode($model->sender) ?></dd></div>
                     <div><dt>ความเร่งด่วน</dt><dd><?= Html::encode($urgency) ?></dd></div>
                     <div><dt>กลุ่มงาน</dt><dd><?= Html::encode($model->department->name ?? '-') ?></dd></div>
-                    <div><dt>ผู้ปฏิบัติ</dt><dd><?= Html::encode($latestAssignment?->assignedTo?->username ?? '-') ?></dd></div>
+                    <div><dt>ผู้ปฏิบัติ</dt><dd><?= Html::encode($latestAssignment?->assignedTo?->displayName() ?? '-') ?></dd></div>
                     <div><dt>ครบกำหนด</dt><dd><?= $model->due_date ? Yii::$app->formatter->asDate($model->due_date) : '-' ?></dd></div>
                 </dl>
             </section>
