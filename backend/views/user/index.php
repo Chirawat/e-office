@@ -29,6 +29,46 @@ $currentUserId = (int) Yii::$app->user->id;
         <?= Html::a('<i class="bi bi-person-plus me-1" aria-hidden="true"></i><span>สร้างผู้ใช้ใหม่</span>', ['create'], ['class' => 'btn btn-sm btn-primary fw-semibold']) ?>
     </div>
 
+    <!-- กล่องควบคุมโหมดอนุมัติสมาชิกอัตโนมัติ (Auto Approve) -->
+    <?php $isAutoApprove = \common\models\SystemSetting::isAutoApproveSignup(); ?>
+    <div class="card border-0 shadow-sm mb-3 <?= $isAutoApprove ? 'bg-success-subtle border-start border-4 border-success' : 'bg-light border-start border-4 border-secondary' ?>">
+        <div class="card-body p-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-circle d-flex align-items-center justify-content-center <?= $isAutoApprove ? 'bg-success text-white' : 'bg-secondary text-white' ?>" style="width: 38px; height: 38px; flex-shrink: 0;">
+                    <i class="bi bi-magic fs-5"></i>
+                </div>
+                <div>
+                    <div class="d-flex align-items-center gap-2">
+                        <strong class="text-dark">โหมดอนุมัติสมาชิกอัตโนมัติ (Auto Approve)</strong>
+                        <span class="badge <?= $isAutoApprove ? 'bg-success text-white' : 'bg-secondary text-white' ?> px-2 py-0">
+                            <?= $isAutoApprove ? 'เปิดใช้งาน' : 'ปิดใช้งาน' ?>
+                        </span>
+                    </div>
+                    <div class="small text-muted">
+                        <?= $isAutoApprove
+                            ? 'ครู/บุคลากรที่สมัครใหม่พร้อมเชื่อม LINE จะได้รับสิทธิ์ใช้งานทันที (Active) โดยไม่ต้องรอ Admin อนุมัติรายคน'
+                            : 'เมื่อมีผู้สมัครใหม่ สมาชิกจะอยู่ในสถานะ "รออนุมัติ" และต้องให้ Admin กดปุ่มอนุมัติในหน้านี้' ?>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <?= Html::a(
+                    $isAutoApprove
+                        ? '<i class="bi bi-toggle-on text-success fs-5 me-1"></i><span>คลิกเพื่อปิดโหมดอัตโนมัติ</span>'
+                        : '<i class="bi bi-toggle-off text-secondary fs-5 me-1"></i><span>คลิกเพื่อเปิดโหมดอัตโนมัติ</span>',
+                    ['toggle-auto-approve'],
+                    [
+                        'class' => 'btn btn-sm ' . ($isAutoApprove ? 'btn-outline-danger' : 'btn-outline-success') . ' fw-semibold px-3 py-1 d-inline-flex align-items-center shadow-sm',
+                        'data-method' => 'post',
+                        'data-confirm' => $isAutoApprove
+                            ? 'ต้องการปิดโหมดอนุมัติอัตโนมัติใช่หรือไม่? (ผู้สมัครใหม่จะต้องรอ Admin อนุมัติรายคน)'
+                            : 'ต้องการเปิดโหมดอนุมัติอัตโนมัติใช่หรือไม่? (ผู้สมัครใหม่จะได้รับสิทธิ์เข้าใช้งานทันที)',
+                    ]
+                ) ?>
+            </div>
+        </div>
+    </div>
+
     <!-- แถบกรองสถานะผู้ใช้งาน -->
     <ul class="nav nav-pills mb-3 gap-2">
         <li class="nav-item">

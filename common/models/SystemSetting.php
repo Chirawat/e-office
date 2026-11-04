@@ -29,6 +29,7 @@ class SystemSetting extends ActiveRecord
     public const KEY_IS_ACTING_DIRECTOR = 'is_acting_director';
     public const KEY_DOC_RECEIVE_START_NO = 'doc_receive_start_no';
     public const KEY_DOC_RECEIVE_YEAR = 'doc_receive_year';
+    public const KEY_AUTO_APPROVE_SIGNUP = 'auto_approve_signup';
 
     /** @var array<string, mixed>|null Local memory cache for request */
     private static ?array $cache = null;
@@ -185,6 +186,14 @@ class SystemSetting extends ActiveRecord
         }
 
         return trim((string) static::get(self::KEY_DIRECTOR_POSITION, 'ผู้อำนวยการโรงเรียน'));
+    }
+
+    /**
+     * ตรวจสอบว่าเปิดโหมด Auto Approve สำหรับผู้สมัครสมาชิกใหม่หรือไม่
+     */
+    public static function isAutoApproveSignup(): bool
+    {
+        return (string) static::get(self::KEY_AUTO_APPROVE_SIGNUP, '0') === '1';
     }
 
     /**

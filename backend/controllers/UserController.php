@@ -8,6 +8,7 @@ use backend\models\UserCreateForm;
 use backend\models\UserUpdateForm;
 use common\components\LineMessagingService;
 use common\models\Department;
+use common\models\SystemSetting;
 use common\models\User;
 use Yii;
 use yii\data\ActiveDataProvider;
@@ -40,6 +41,7 @@ class UserController extends Controller
                     'approve' => ['post'],
                     'reset-password' => ['post'],
                     'delete' => ['post'],
+                    'toggle-auto-approve' => ['post'],
                 ],
             ],
         ];
@@ -196,6 +198,22 @@ class UserController extends Controller
         }
 
         return $this->redirect(['index']);
+    }
+
+    public function actionToggleAutoApprove(): Response
+    {
+        $this->requireAdmin();
+        $current = SystemSetting::isAutoApproveSignup();
+        $next = !$current;
+        SystemSetting::set(SystemSetting::KEY_AUTO_APPROVE_SIGNUP, $next ? '1' : '0', 'user', 'อนุมัติการสมัครสมาชิกใหม่อัตโนมัติ');
+
+        if ($next) {
+            Yii::$app->session->setFlash('success', 'เปิดใช้งานโหมดอนุมัติอัตโนมัติ (Auto Approve) เรียบร้อยแล้ว สมาชิกใหม่จะได้รับอนุมัติทันที');
+        } else {
+            Yii::$app->session->setFlash('info', 'ปิดใช้งานโหมดอนุมัติอัตโนมัติเรียบร้อยแล้ว สมาชิกใหม่จะต้องรอ Admin ตรวจสอบและกดอนุมัติ');
+        }
+
+        return $this->redirect(Yii::$app->request->referrer ?: ['index']);
     }
 
     private function findModel(int $id): User

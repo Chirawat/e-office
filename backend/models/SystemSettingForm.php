@@ -19,6 +19,7 @@ class SystemSettingForm extends Model
     public ?string $acting_director_name = '';
     public string $acting_director_position = 'รองผู้อำนวยการ รักษาการในตำแหน่งผู้อำนวยการโรงเรียนกุดชุมวิทยาคม';
     public int $is_acting_director = 0;
+    public int $auto_approve_signup = 0;
     public int $doc_receive_start_no = 1;
     public int $doc_receive_year = 2569;
 
@@ -34,7 +35,7 @@ class SystemSettingForm extends Model
             [['doc_receive_start_no', 'doc_receive_year'], 'required'],
             [['doc_receive_start_no'], 'integer', 'min' => 1, 'max' => 999999],
             [['doc_receive_year'], 'integer', 'min' => 2500, 'max' => 2700],
-            [['is_acting_director'], 'boolean'],
+            [['is_acting_director', 'auto_approve_signup'], 'boolean'],
             [['acting_director_user_id'], 'integer'],
             [['acting_director_user_id'], 'exist', 'skipOnError' => true, 'targetClass' => \common\models\User::class, 'targetAttribute' => ['acting_director_user_id' => 'id']],
             [['school_name', 'director_name', 'director_position', 'acting_director_name', 'acting_director_position'], 'string', 'max' => 255],
@@ -54,6 +55,7 @@ class SystemSettingForm extends Model
             'acting_director_name' => 'ชื่อ-นามสกุล รองผู้อำนวยการ (รักษาการแทน)',
             'acting_director_position' => 'ตำแหน่งรักษาการ',
             'is_acting_director' => 'เปิดใช้งานชื่อรักษาการแทนผู้อำนวยการ (ในกรณีที่ผู้อำนวยการโรงเรียนไม่อยู่)',
+            'auto_approve_signup' => 'อนุมัติผู้ใช้งานใหม่อัตโนมัติ (Auto Approve)',
             'doc_receive_start_no' => 'เลขรับหนังสือเริ่มต้น',
             'doc_receive_year' => 'ปี พ.ศ. ของเลขรับหนังสือ',
         ];
@@ -66,6 +68,7 @@ class SystemSettingForm extends Model
             'acting_director_user_id' => 'เลือกผู้ใช้ในระบบที่จะทำหน้าที่รักษาการแทน เพื่อให้ได้รับสิทธิ์ในการสั่งการและอนุมัติหนังสือ/บันทึกข้อความตามสายงาน',
             'acting_director_name' => 'ระบุชื่อรองผู้อำนวยการที่จะลงนามหรือปฏิบัติราชการแทนเมื่อ ผอ. ไม่อยู่',
             'is_acting_director' => 'ติ๊กเลือกเมื่อ ผอ. ติดราชการ/ไม่อยู่ เพื่อให้ระบบใช้ชื่อและตำแหน่งผู้รักษาการแทนบนเอกสารและงานสารบรรณ',
+            'auto_approve_signup' => 'เมื่อเปิดใช้งาน สมาชิกใหม่ที่ลงทะเบียนและผูก LINE สำเร็จจะได้รับสิทธิ์เข้าใช้งานทันทีโดยไม่ต้องรอ Admin กดอนุมัติรายคน',
             'doc_receive_start_no' => 'เช่น เลข 1 หรือเลขเริ่มต้นตามสมุดทะเบียนรับของโรงเรียน',
             'doc_receive_year' => 'ระบุเป็นปี พ.ศ. เช่น ' . ((int) date('Y') + 543),
         ];
@@ -83,6 +86,7 @@ class SystemSettingForm extends Model
         $this->acting_director_name = (string) SystemSetting::get(SystemSetting::KEY_ACTING_DIRECTOR_NAME, '');
         $this->acting_director_position = (string) SystemSetting::get(SystemSetting::KEY_ACTING_DIRECTOR_POSITION, 'รองผู้อำนวยการ รักษาการในตำแหน่งผู้อำนวยการโรงเรียนกุดชุมวิทยาคม');
         $this->is_acting_director = (int) SystemSetting::get(SystemSetting::KEY_IS_ACTING_DIRECTOR, 0);
+        $this->auto_approve_signup = (int) SystemSetting::get(SystemSetting::KEY_AUTO_APPROVE_SIGNUP, 0);
         $this->doc_receive_start_no = (int) SystemSetting::get(SystemSetting::KEY_DOC_RECEIVE_START_NO, 1);
         $this->doc_receive_year = (int) SystemSetting::get(SystemSetting::KEY_DOC_RECEIVE_YEAR, $currentYear);
     }
@@ -109,6 +113,7 @@ class SystemSettingForm extends Model
         SystemSetting::set(SystemSetting::KEY_ACTING_DIRECTOR_NAME, trim((string) $this->acting_director_name), 'executive', 'ชื่อรองผู้อำนวยการ รักษาการในตำแหน่งผู้อำนวยการโรงเรียน');
         SystemSetting::set(SystemSetting::KEY_ACTING_DIRECTOR_POSITION, trim($this->acting_director_position), 'executive', 'ตำแหน่งรักษาการแทนผู้อำนวยการโรงเรียน');
         SystemSetting::set(SystemSetting::KEY_IS_ACTING_DIRECTOR, $this->is_acting_director ? '1' : '0', 'executive', 'ใช้ชื่อรักษาการแทนผู้อำนวยการ');
+        SystemSetting::set(SystemSetting::KEY_AUTO_APPROVE_SIGNUP, $this->auto_approve_signup ? '1' : '0', 'user', 'อนุมัติการสมัครสมาชิกใหม่อัตโนมัติ');
         SystemSetting::set(SystemSetting::KEY_DOC_RECEIVE_START_NO, (string) $this->doc_receive_start_no, 'document', 'เลขรับหนังสือเริ่มต้น');
         SystemSetting::set(SystemSetting::KEY_DOC_RECEIVE_YEAR, (string) $this->doc_receive_year, 'document', 'ปี พ.ศ. ของเลขรับหนังสือ');
 

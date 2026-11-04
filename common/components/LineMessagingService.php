@@ -83,27 +83,34 @@ class LineMessagingService
     /**
      * แจ้งเตือนผู้ดูแลระบบเมื่อมีคุณครูสมัครใช้งานใหม่
      */
-    public function notifyAdminNewTeacherSignup(User $newTeacher): void
+    public function notifyAdminNewTeacherSignup(User $newTeacher, bool $isAutoApproved = false): void
     {
         $admins = User::find()
             ->where(['role' => User::ROLE_ADMIN, 'status' => User::STATUS_ACTIVE])
             ->andWhere(['is not', 'line_user_id', null])
             ->all();
 
-        $altText = '🔔 มีคุณครูสมัครใช้งาน e-Office ใหม่: ' . $newTeacher->displayName();
-        $flex = $this->buildAdminNewTeacherSignupFlex($newTeacher);
+        $altText = $isAutoApproved
+            ? '✨ มีสมาชิกใหม่ (อนุมัติอัตโนมัติแล้ว): ' . $newTeacher->displayName()
+            : '🔔 มีคุณครูสมัครใช้งาน e-Office ใหม่: ' . $newTeacher->displayName();
+        $flex = $this->buildAdminNewTeacherSignupFlex($newTeacher, $isAutoApproved);
 
         $deptName = $newTeacher->department?->name ?? 'ไม่ระบุ';
+        $statusLabel = $isAutoApproved ? 'อนุมัติอัตโนมัติ (เข้าใช้งานได้ทันที)' : 'รอการอนุมัติ';
+        $targetUrl = $isAutoApproved
+            ? Url::to(['/user/index'], true)
+            : Url::to(['/user/index', 'status' => User::STATUS_INACTIVE], true);
+
         $fallbackText = implode("\n", [
-            '🔔 มีคุณครูสมัครใช้งาน e-Office ใหม่',
+            $isAutoApproved ? '✨ มีสมาชิกใหม่ (อนุมัติอัตโนมัติ)' : '🔔 มีคุณครูสมัครใช้งาน e-Office ใหม่',
             '',
             'ชื่อ-นามสกุล: ' . $newTeacher->displayName(),
             'ชื่อผู้ใช้: ' . $newTeacher->username,
             'เบอร์โทร: ' . ($newTeacher->phone ?: '-'),
             'กลุ่มงาน: ' . $deptName,
-            'สถานะ: รอการอนุมัติ',
+            'สถานะ: ' . $statusLabel,
             '',
-            'ตรวจสอบและอนุมัติได้ที่: ' . Url::to(['/user/index', 'status' => User::STATUS_INACTIVE], true),
+            'ดูรายละเอียดได้ที่: ' . $targetUrl,
         ]);
 
         foreach ($admins as $admin) {
@@ -595,10 +602,18 @@ class LineMessagingService
     /**
      * สร้าง Flex Bubble สำหรับแจ้งเตือนแอดมินเมื่อมีครูสมัครใช้งานใหม่
      */
-    public function buildAdminNewTeacherSignupFlex(User $newTeacher): array
+    public function buildAdminNewTeacherSignupFlex(User $newTeacher, bool $isAutoApproved = false): array
     {
-        $reviewUrl = $this->normalizeHttpsUrl(Url::to(['/user/index', 'status' => User::STATUS_INACTIVE], true));
+        $reviewUrl = $isAutoApproved
+            ? $this->normalizeHttpsUrl(Url::to(['/user/index'], true))
+            : $this->normalizeHttpsUrl(Url::to(['/user/index', 'status' => User::STATUS_INACTIVE], true));
         $deptName = $newTeacher->department?->name ?? 'ไม่ระบุ';
+
+        $headerTitle = $isAutoApproved ? '✨ สมาชิกใหม่ (อนุมัติอัตโนมัติ)' : '🔔 สมาชิกใหม่รอการอนุมัติ';
+        $badgeText = $isAutoApproved ? 'อนุมัติแล้ว' : 'รออนุมัติ';
+        $badgeColor = $isAutoApproved ? '#15803d' : '#b45309';
+        $badgeBg = $isAutoApproved ? '#dcfce7' : '#fef3c7';
+        $buttonLabel = $isAutoApproved ? '👥 ดูรายชื่อผู้ใช้งาน' : '🔍 ตรวจสอบและอนุมัติ';
 
         return [
             'type' => 'bubble',
@@ -612,7 +627,7 @@ class LineMessagingService
                 'contents' => [
                     [
                         'type' => 'text',
-                        'text' => '🔔 สมาชิกใหม่รอการอนุมัติ',
+                        'text' => $headerTitle,
                         'weight' => 'bold',
                         'color' => '#ffffff',
                         'size' => 'sm',
@@ -621,7 +636,7 @@ class LineMessagingService
                     [
                         'type' => 'box',
                         'layout' => 'vertical',
-                        'backgroundColor' => '#fef3c7',
+                        'backgroundColor' => $badgeBg,
                         'cornerRadius' => 'md',
                         'paddingStart' => '8px',
                         'paddingEnd' => '8px',
@@ -630,8 +645,8 @@ class LineMessagingService
                         'contents' => [
                             [
                                 'type' => 'text',
-                                'text' => 'รออนุมัติ',
-                                'color' => '#b45309',
+                                'text' => $badgeText,
+                                'color' => $badgeColor,
                                 'size' => 'xxs',
                                 'weight' => 'bold',
                                 'align' => 'center',
@@ -647,7 +662,7 @@ class LineMessagingService
                 'contents' => [
                     [
                         'type' => 'text',
-                        'text' => 'มีคุณครูสมัครใช้งาน e-Office ใหม่',
+                        'text' => $isAutoApproved ? 'มีคุณครูลงทะเบียนใหม่และได้รับอนุมัติทันที' : 'มีคุณครูสมัครใช้งาน e-Office ใหม่',
                         'weight' => 'bold',
                         'size' => 'md',
                         'color' => '#1e293b',
@@ -684,7 +699,7 @@ class LineMessagingService
                         'height' => 'sm',
                         'action' => [
                             'type' => 'uri',
-                            'label' => '🔍 ตรวจสอบและอนุมัติ',
+                            'label' => $buttonLabel,
                             'uri' => $reviewUrl,
                         ],
                     ],

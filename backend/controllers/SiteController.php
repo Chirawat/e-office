@@ -259,9 +259,6 @@ class SiteController extends Controller
         if (!empty($lineData['line_user_id'])) {
             $model->line_user_id = $lineData['line_user_id'];
             $model->line_display_name = $lineData['line_display_name'] ?? '';
-            if (empty($model->fullname)) {
-                $model->fullname = $model->line_display_name;
-            }
         }
 
         if ($model->load(Yii::$app->request->post())) {
@@ -270,10 +267,12 @@ class SiteController extends Controller
                 // ล้าง session LINE ชั่วคราว
                 Yii::$app->session->remove('signup_line_data');
 
+                $isAutoApproved = (int) $user->status === User::STATUS_ACTIVE;
+
                 // แจ้งเตือนแอดมินทาง LINE ทันที
                 try {
                     $lineService = new LineMessagingService();
-                    $lineService->notifyAdminNewTeacherSignup($user);
+                    $lineService->notifyAdminNewTeacherSignup($user, $isAutoApproved);
                 } catch (\Throwable $e) {
                     Yii::error('Failed to notify admin via LINE: ' . $e->getMessage(), __METHOD__);
                 }
@@ -281,10 +280,20 @@ class SiteController extends Controller
                 // ส่งข้อความยืนยันการลงทะเบียนเข้าแชท LINE ของครูทันที
                 try {
                     $lineService = new LineMessagingService();
-                    $deptName = $user->department?->name ?? 'ทั่วไป';
-                    $lineService->pushText($user->line_user_id, "📋 ลงทะเบียนเข้าใช้งาน e-Office สำเร็จ\n\nสวัสดีครับคุณครู " . $user->displayName() . "\nสังกัด: " . $deptName . "\n\nขณะนี้ข้อมูลของคุณครูอยู่ระหว่างรอ 'ผู้ดูแลระบบ (Admin) ตรวจสอบและอนุมัติ'\nเมื่อได้รับการอนุมัติแล้ว ระบบจะส่งข้อความแจ้งเตือนมาทาง LINE นี้ทันทีครับ");
+                    if ($isAutoApproved) {
+                        $lineService->notifyTeacherApproved($user);
+                    } else {
+                        $deptName = $user->department?->name ?? 'ทั่วไป';
+                        $lineService->pushText($user->line_user_id, "📋 ลงทะเบียนเข้าใช้งาน e-Office สำเร็จ\n\nสวัสดีครับคุณครู " . $user->displayName() . "\nสังกัด: " . $deptName . "\n\nขณะนี้ข้อมูลของคุณครูอยู่ระหว่างรอ 'ผู้ดูแลระบบ (Admin) ตรวจสอบและอนุมัติ'\nเมื่อได้รับการอนุมัติแล้ว ระบบจะส่งข้อความแจ้งเตือนมาทาง LINE นี้ทันทีครับ");
+                    }
                 } catch (\Throwable $e) {
                     Yii::error('Failed to notify teacher welcome on signup: ' . $e->getMessage(), __METHOD__);
+                }
+
+                if ($isAutoApproved) {
+                    Yii::$app->user->login($user, 3600 * 24 * 30);
+                    Yii::$app->session->setFlash('success', 'ลงทะเบียนและเข้าสู่ระบบสำเร็จ ยินดีต้อนรับคุณครู ' . $user->displayName() . ' เข้าสู่ระบบ e-Office');
+                    return $this->redirect(['/document/my']);
                 }
 
                 return $this->redirect(['pending-approval', 'id' => $user->id]);

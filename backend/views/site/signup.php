@@ -136,7 +136,7 @@ $hasLineLinked = !empty($model->line_user_id);
                                 'placeholder' => 'เช่น นายสมชาย ใจดี',
                                 'autofocus' => true,
                             ],
-                        ])->textInput()->label('ชื่อ - นามสกุล', $labelOptions) ?>
+                        ])->textInput()->label('ชื่อ - นามสกุลจริง (ทางการ)', $labelOptions)->hint('ระบุคำนำหน้าและชื่อ-นามสกุลจริงสำหรับใช้ในระบบเอกสารราชการ') ?>
                     </div>
 
                     <div class="col-md-6">
@@ -201,10 +201,15 @@ $hasLineLinked = !empty($model->line_user_id);
                     </div>
                 </div>
 
-                <div class="alert alert-info border-0 rounded-3 d-flex align-items-center mt-4 mb-4 py-2 px-3 small" style="background-color: #eff6ff; color: #1e40af;">
-                    <i class="bi bi-info-circle-fill fs-5 me-2 text-primary"></i>
+                <?php $isAutoApprove = \common\models\SystemSetting::isAutoApproveSignup(); ?>
+                <div class="alert <?= $isAutoApprove ? 'alert-success' : 'alert-info' ?> border-0 rounded-3 d-flex align-items-center mt-4 mb-4 py-2 px-3 small" style="<?= $isAutoApprove ? 'background-color: #ecfdf5; color: #065f46;' : 'background-color: #eff6ff; color: #1e40af;' ?>">
+                    <i class="bi <?= $isAutoApprove ? 'bi-check-circle-fill text-success' : 'bi-info-circle-fill text-primary' ?> fs-5 me-2"></i>
                     <div>
-                        เมื่อกดลงทะเบียน ระบบจะนำไปยัง <strong>หน้าแสดงสถานะรอ Admin ยืนยันข้อมูล</strong> และส่งแจ้งเตือนเข้า LINE ของท่านทันที
+                        <?php if ($isAutoApprove): ?>
+                            เมื่อกดลงทะเบียน บัญชีจะได้รับการ <strong>อนุมัติและเข้าสู่ระบบทันที</strong> พร้อมส่งข้อความยืนยันเข้า LINE ของท่าน
+                        <?php else: ?>
+                            เมื่อกดลงทะเบียน ระบบจะนำไปยัง <strong>หน้าแสดงสถานะรอ Admin ยืนยันข้อมูล</strong> และส่งแจ้งเตือนเข้า LINE ของท่านทันที
+                        <?php endif; ?>
                     </div>
                 </div>
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace backend\models;
 
 use common\models\Department;
+use common\models\SystemSetting;
 use common\models\User;
 use common\models\UserDepartment;
 use Yii;
@@ -78,7 +79,7 @@ class SignupForm extends Model
         $user->email = $this->email;
         $user->role = User::ROLE_GENERAL_USER; // ค่าเริ่มต้นเป็นผู้ใช้ทั่วไป/ครูผู้ปฏิบัติงาน
         $user->department_id = (int) $this->department_id;
-        $user->status = User::STATUS_INACTIVE; // รอการอนุมัติจาก Admin
+        $user->status = SystemSetting::isAutoApproveSignup() ? User::STATUS_ACTIVE : User::STATUS_INACTIVE;
         $user->line_user_id = $this->line_user_id;
         $user->line_display_name = $this->line_display_name !== '' ? $this->line_display_name : null;
         $user->line_linked_at = time();
