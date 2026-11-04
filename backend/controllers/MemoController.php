@@ -58,13 +58,95 @@ class MemoController extends Controller
     {
         $identity = $this->identity();
         $keyword = trim((string) Yii::$app->request->get('q', ''));
-        $query = Memo::find()->with(['department', 'creator', 'currentActor'])->orderBy(['updated_at' => SORT_DESC, 'id' => SORT_DESC]);
+        $departmentId = Yii::$app->request->get('department_id');
+        $departmentId = ($departmentId !== null && $departmentId !== '') ? (int) $departmentId : null;
+
+        $query = Memo::find()
+            ->with(['department', 'creator', 'currentActor'])
+            ->orderBy(['{{%memo}}.[[updated_at]]' => SORT_DESC, '{{%memo}}.[[id]]' => SORT_DESC]);
         $this->applyVisibilityScope($query, $identity);
-        $this->applyKeyword($query, $keyword);
+
+        // รายการกลุ่มงานทั้งหมดที่เปิดใช้งาน
+        $departments = Department::find()
+            ->where(['is_active' => true])
+            ->orderBy(['sort_order' => SORT_ASC, 'id' => SORT_ASC])
+            ->all();
+
+        // ฐานการนับจำนวนบันทึกสำหรับแต่ละแท็บ
+        $countQuery = Memo::find();
+        $this->applyVisibilityScope($countQuery, $identity);
+
+        // คัดกรองตามกลุ่มงานหากมีการเลือกแท็บ
+        if ($departmentId !== null) {
+            $query->andWhere(['{{%memo}}.[[department_id]]' => $departmentId]);
+        }
+
+        if ($keyword !== '') {
+            $this->applyKeyword($query, $keyword);
+            $this->applyKeyword($countQuery, $keyword);
+        }
+
+        // คำนวณจำนวนบันทึกรวมทั้งหมด
+        $countAll = (int) (clone $countQuery)->count();
+
+        // คำนวณจำนวนบันทึกของแต่ละกลุ่มงาน
+        $deptCounts = [];
+        $deptCountRows = (clone $countQuery)
+            ->select(['{{%memo}}.[[department_id]]', 'COUNT(*) AS cnt'])
+            ->groupBy('{{%memo}}.[[department_id]]')
+            ->asArray()
+            ->all();
+        foreach ($deptCountRows as $row) {
+            if ($row['department_id'] !== null) {
+                $deptCounts[(int) $row['department_id']] = (int) $row['cnt'];
+            }
+        }
+
+        $dataProvider = new ActiveDataProvider([
+            'query' => $query,
+            'pagination' => ['pageSize' => 20],
+        ]);
+
+        $unreadCountAll = $countAll;
+        $unreadDeptCounts = $deptCounts;
+        $readMemoMap = [];
+
+        if ($identity instanceof User) {
+            $readMemoIds = MemoRead::find()
+                ->select('memo_id')
+                ->where(['user_id' => $identity->id])
+                ->column();
+            $readMemoMap = array_fill_keys(array_map('intval', $readMemoIds), true);
+
+            $unreadBaseQuery = (clone $countQuery)
+                ->leftJoin('{{%memo_read}}', '{{%memo_read}}.[[memo_id]] = {{%memo}}.[[id]] AND {{%memo_read}}.[[user_id]] = :uid', [':uid' => $identity->id])
+                ->andWhere(['{{%memo_read}}.[[id]]' => null]);
+
+            $unreadCountAll = (int) (clone $unreadBaseQuery)->count();
+
+            $unreadDeptCounts = [];
+            $unreadDeptRows = (clone $unreadBaseQuery)
+                ->select(['{{%memo}}.[[department_id]]', 'COUNT(*) AS cnt'])
+                ->groupBy('{{%memo}}.[[department_id]]')
+                ->asArray()
+                ->all();
+            foreach ($unreadDeptRows as $row) {
+                if ($row['department_id'] !== null) {
+                    $unreadDeptCounts[(int) $row['department_id']] = (int) $row['cnt'];
+                }
+            }
+        }
 
         return $this->render('index', [
-            'dataProvider' => new ActiveDataProvider(['query' => $query, 'pagination' => ['pageSize' => 20]]),
+            'dataProvider' => $dataProvider,
             'keyword' => $keyword,
+            'departmentId' => $departmentId,
+            'departments' => $departments,
+            'countAll' => $countAll,
+            'deptCounts' => $deptCounts,
+            'unreadCountAll' => $unreadCountAll,
+            'unreadDeptCounts' => $unreadDeptCounts,
+            'readMemoMap' => $readMemoMap,
         ]);
     }
 
@@ -507,31 +589,31 @@ class MemoController extends Controller
         if ($identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
             $query->andWhere([
                 'or',
-                ['created_by' => $identity->id],
-                ['current_actor_id' => $identity->id],
-                ['department_id' => $identity->department_id],
+                ['{{%memo}}.[[created_by]]' => $identity->id],
+                ['{{%memo}}.[[current_actor_id]]' => $identity->id],
+                ['{{%memo}}.[[department_id]]' => $identity->department_id],
             ]);
             return;
         }
 
         $query->andWhere([
             'or',
-            ['created_by' => $identity->id],
-            ['current_actor_id' => $identity->id],
+            ['{{%memo}}.[[created_by]]' => $identity->id],
+            ['{{%memo}}.[[current_actor_id]]' => $identity->id],
         ]);
     }
 
     private function applyMyScope(ActiveQuery $query, User $identity): void
     {
         if ($identity->hasRole(User::ROLE_ADMIN)) {
-            $query->andWhere(['not in', 'status', [Memo::STATUS_COMPLETED]]);
+            $query->andWhere(['not in', '{{%memo}}.[[status]]', [Memo::STATUS_COMPLETED]]);
             return;
         }
 
         $query->andWhere([
             'or',
-            ['current_actor_id' => $identity->id],
-            ['and', ['created_by' => $identity->id], ['status' => [Memo::STATUS_DRAFT, Memo::STATUS_RETURNED, Memo::STATUS_APPROVED]]],
+            ['{{%memo}}.[[current_actor_id]]' => $identity->id],
+            ['and', ['{{%memo}}.[[created_by]]' => $identity->id], ['{{%memo}}.[[status]]' => [Memo::STATUS_DRAFT, Memo::STATUS_RETURNED, Memo::STATUS_APPROVED]]],
         ]);
     }
 
@@ -543,8 +625,8 @@ class MemoController extends Controller
 
         $query->andWhere([
             'or',
-            ['like', 'subject', $keyword],
-            ['like', 'memo_no', $keyword],
+            ['like', '{{%memo}}.[[subject]]', $keyword],
+            ['like', '{{%memo}}.[[memo_no]]', $keyword],
         ]);
     }
 }

@@ -12,9 +12,9 @@ use yii\helpers\Url;
 /** @var Memo $model */
 /** @var string|null $previewImagePath */
 
-$this->title = 'บันทึกเสนอ: ' . $model->subject;
+$this->title = ($model->memo_no ? $model->memo_no . ' - ' : '') . $model->subject;
 $this->params['breadcrumbs'][] = ['label' => 'บันทึกเสนอ', 'url' => ['index']];
-$this->params['breadcrumbs'][] = 'รายละเอียด';
+$this->params['breadcrumbs'][] = $model->memo_no ?: 'รายละเอียด';
 $this->registerCssFile('@web/css/eoffice.css', ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
 
 $this->registerCss('
@@ -102,6 +102,7 @@ html, body, .eoffice-body, main, .eoffice-main, .eoffice-container, .eoffice-pag
     }
 }
 ');
+
 $identity = Yii::$app->user->identity;
 $statusLabel = Memo::statusOptions()[$model->status] ?? $model->status;
 $statusClass = 'status-badge-' . str_replace('_', '-', $model->status);
@@ -113,12 +114,10 @@ $csrf = Html::hiddenInput(Yii::$app->request->csrfParam, Yii::$app->request->csr
 $canEdit = $identity instanceof User
     && ((int) $model->created_by === (int) $identity->id || $identity->hasRole(User::ROLE_ADMIN))
     && in_array($model->status, [Memo::STATUS_DRAFT, Memo::STATUS_RETURNED], true);
-$canDebugRestamp = false;
 $showStampPositionTools = true;
 $canAdjustStampPositions = $showStampPositionTools && $identity instanceof User
     && ((int) $model->created_by === (int) $identity->id || $identity->hasRole(User::ROLE_ADMIN))
     && !in_array($model->status, [Memo::STATUS_APPROVED, Memo::STATUS_COMPLETED], true);
-$useBrowserPdfPreview = $previewImageUrl === null && $canAdjustStampPositions;
 $stampPositionDefaults = array_map(
     static fn (array $position): array => [
         'x' => (float) $position['x'],
@@ -157,6 +156,17 @@ $thaiDateTime = static function (int|string|null $value): string {
     $months = [1 => 'ม.ค.', 2 => 'ก.พ.', 3 => 'มี.ค.', 4 => 'เม.ย.', 5 => 'พ.ค.', 6 => 'มิ.ย.', 7 => 'ก.ค.', 8 => 'ส.ค.', 9 => 'ก.ย.', 10 => 'ต.ค.', 11 => 'พ.ย.', 12 => 'ธ.ค.'];
     return (int) date('j', $timestamp) . ' ' . $months[(int) date('n', $timestamp)] . ' ' . ((int) date('Y', $timestamp) + 543) . ' ' . date('H:i', $timestamp) . ' น.';
 };
+$thaiDate = static function (?string $date): string {
+    if ($date === null || $date === '') {
+        return '-';
+    }
+    $timestamp = strtotime($date);
+    if ($timestamp === false) {
+        return $date;
+    }
+    $yearThai = (int) date('Y', $timestamp) + 543;
+    return date('d/m/', $timestamp) . $yearThai . ' BE';
+};
 
 $this->registerJsFile('@web/js/pdf.min.js', [
     'position' => \yii\web\View::POS_HEAD,
@@ -164,75 +174,64 @@ $this->registerJsFile('@web/js/pdf.min.js', [
 ?>
 
 <div class="eoffice-page">
-    <div class="eoffice-titlebar">
-        <div>
-            <h1><?= Html::encode($model->subject) ?></h1>
-            <p><span class="status-badge <?= Html::encode($statusClass) ?>"><?= Html::encode($statusLabel) ?></span></p>
-        </div>
-        <div class="pdf-toolbar-actions">
-            <?= Html::a('<i class="bi bi-arrow-left" aria-hidden="true"></i><span>กลับรายการ</span>', ['index'], ['class' => 'btn btn-outline-secondary']) ?>
-            <?= Html::a('<i class="bi bi-file-earmark-pdf" aria-hidden="true"></i><span>เปิด PDF บันทึกข้อความ</span>', $memoPdfUrl, ['class' => 'btn btn-success stamped-pdf-button', 'target' => '_blank']) ?>
-            <?php if ($canEdit): ?>
-                <?= Html::a('<i class="bi bi-pencil-square" aria-hidden="true"></i><span>แก้ไข</span>', ['update', 'id' => $model->id], ['class' => 'btn btn-outline-primary']) ?>
-            <?php endif; ?>
-        </div>
-    </div>
-
     <div class="document-workspace">
         <section class="content-card pdf-card-section p-0 border-0 shadow-sm overflow-hidden">
-            <div class="pdf-toolbar">
-                <div>
-                    <strong>PDF บันทึกข้อความ</strong>
-                <span><?= $canAdjustStampPositions ? 'ปรับกรอบตำแหน่งจาก slider ด้านขวา แล้วบันทึกเพื่อสร้าง PDF ใหม่' : 'ระบบสร้าง PDF ล่าสุดพร้อมความเห็นและลายเซ็นตามขั้นตอนที่ดำเนินการแล้ว' ?></span>
+            <!-- Compact Header / Back Bar for Mobile & Desktop -->
+            <div class="pdf-viewer-header d-flex align-items-center justify-content-between p-2 px-3 bg-white border-bottom gap-2">
+                <div class="d-flex align-items-center gap-2 text-truncate">
+                    <?= Html::a('<i class="bi bi-arrow-left" aria-hidden="true"></i> <span class="d-none d-sm-inline">กลับ</span>', ['/memo/index'], [
+                        'class' => 'btn btn-sm btn-outline-secondary py-1 px-2 text-nowrap',
+                        'title' => 'กลับรายการบันทึกข้อความ',
+                    ]) ?>
+                    <span class="badge bg-teal-subtle text-teal border border-teal-subtle font-monospace text-nowrap" style="color: #0f766e; background-color: #ccfbf1; border-color: #99f6e4;">
+                        <?= Html::encode($model->memo_no ?: '(ฉบับร่าง)') ?>
+                    </span>
+                    <span class="fw-semibold text-dark text-truncate small" title="<?= Html::encode($model->subject) ?>">
+                        <?= Html::encode($model->subject) ?>
+                    </span>
                 </div>
-                <div class="pdf-toolbar-actions">
-                    <?= Html::a('<i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span>เปิดในแท็บใหม่</span>', $memoPdfUrl, ['class' => 'btn btn-outline-primary', 'target' => '_blank']) ?>
-                    <?php if ($canDebugRestamp): ?>
-                        <?= Html::beginForm(['debug-restamp', 'id' => $model->id], 'post', ['class' => 'inline-form']) ?>
-                            <?= $csrf ?>
-                            <?= Html::submitButton('<i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>Debug re-stamp</span>', [
-                                'class' => 'btn btn-warning debug-restamp-button',
-                                'title' => 'สร้าง PDF บันทึกข้อความใหม่เพื่อเช็คตำแหน่งลายเซ็นและการปั๊มทั้งหน้า',
-                            ]) ?>
-                        <?= Html::endForm() ?>
+                <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                    <?php if ($canEdit): ?>
+                        <?= Html::a('<i class="bi bi-pencil-square" aria-hidden="true"></i> <span class="d-none d-sm-inline">แก้ไข</span>', ['update', 'id' => $model->id], [
+                            'class' => 'btn btn-sm btn-outline-primary py-1 px-2 text-nowrap',
+                            'title' => 'แก้ไขบันทึกข้อความ',
+                        ]) ?>
                     <?php endif; ?>
+                    <span class="status-badge <?= Html::encode($statusClass) ?>" style="font-size: 0.75rem; padding: 2px 8px; min-height: 24px;">
+                        <?= Html::encode($statusLabel) ?>
+                    </span>
                 </div>
             </div>
 
-            <div class="pdf-preview-frame memo-pdf-frame">
-                <div class="pdf-preview-status">
-                    <span class="preview-badge stamped">PDF บันทึกข้อความ</span>
-                    <span class="muted-text">แสดงเอกสารฉบับเดียวกับปุ่มเปิด PDF</span>
-                </div>
-
-                <!-- PDF Controls Toolbar (Mobile & iPad friendly) -->
-                <div class="pdf-viewer-controls p-2 bg-light border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="pdf-preview-frame">
+                <!-- PDF Controls Toolbar (Sticky, Mobile-Optimized) -->
+                <div class="pdf-viewer-controls p-2 bg-light border-bottom d-flex align-items-center justify-content-between flex-wrap gap-1 sticky-top" style="z-index: 10;">
                     <div class="d-flex align-items-center gap-1">
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="pdf-prev-page" title="หน้าก่อนหน้า">
+                        <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-1" id="pdf-prev-page" title="หน้าก่อนหน้า">
                             <i class="bi bi-chevron-left"></i>
                         </button>
-                        <span class="small font-monospace px-2 text-dark" id="pdf-page-num-display">
-                            หน้า <strong id="pdf-current-page">1</strong> / <span id="pdf-total-pages">-</span>
+                        <span class="small font-monospace px-1 text-dark text-nowrap" id="pdf-page-num-display">
+                            <strong id="pdf-current-page">1</strong> / <span id="pdf-total-pages">-</span>
                         </span>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="pdf-next-page" title="หน้าถัดไป">
+                        <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-1" id="pdf-next-page" title="หน้าถัดไป">
                             <i class="bi bi-chevron-right"></i>
                         </button>
                     </div>
                     
                     <div class="d-flex align-items-center gap-1">
-                        <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="pdf-zoom-out" title="ย่อ">
+                        <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-1" id="pdf-zoom-out" title="ย่อ">
                             <i class="bi bi-zoom-out"></i>
                         </button>
-                        <span class="small font-monospace px-1 text-muted" id="pdf-zoom-level">100%</span>
-                        <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="pdf-zoom-in" title="ขยาย">
+                        <span class="small font-monospace px-1 text-muted d-none d-sm-inline" id="pdf-zoom-level">100%</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-1" id="pdf-zoom-in" title="ขยาย">
                             <i class="bi bi-zoom-in"></i>
                         </button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary px-2" id="pdf-zoom-fit" title="พอดีหน้าจอ">
+                        <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-1" id="pdf-zoom-fit" title="พอดีหน้าจอ">
                             <i class="bi bi-arrows-fullscreen"></i>
                         </button>
-                        <a href="<?= Html::encode($memoPdfUrl) ?>" target="_blank" class="btn btn-sm btn-success fw-semibold ms-1 d-inline-flex align-items-center gap-1">
+                        <a href="<?= Html::encode($memoPdfUrl) ?>" target="_blank" class="btn btn-sm btn-primary fw-semibold px-2 py-1 ms-1 d-inline-flex align-items-center gap-1" title="เปิดเอกสารแท็บใหม่">
                             <i class="bi bi-box-arrow-up-right"></i>
-                            <span>เปิดเต็มจอ</span>
+                            <span class="d-none d-sm-inline">เต็มจอ</span>
                         </a>
                     </div>
                 </div>
@@ -241,14 +240,14 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                 <div class="pdf-canvas-wrapper text-center p-0" id="pdf-canvas-wrapper" style="overflow-x: auto; background: #e2e8f0; min-height: auto; -webkit-overflow-scrolling: touch;">
                     <div id="pdf-loading-indicator" class="py-5 text-dark">
                         <div class="spinner-border text-primary mb-2" role="status"></div>
-                        <div class="small fw-semibold">กำลังโหลดเอกสาร PDF...</div>
+                        <div class="small fw-semibold">กำลังโหลดเอกสาร PDF คมชัดสูง...</div>
                     </div>
 
                     <div id="pdf-error-fallback" class="d-none py-5 bg-white rounded p-4 text-center my-3 shadow-sm mx-auto" style="max-width: 500px;">
                         <i class="bi bi-file-earmark-pdf text-success fs-1 d-block mb-2"></i>
                         <h5 class="fw-bold text-dark">เปิดอ่านบันทึกข้อความ PDF</h5>
                         <p class="text-muted small">สามารถแตะปุ่มด้านล่างเพื่อเปิดอ่านบน iPad หรือมือถือได้ทันที</p>
-                        <a href="<?= Html::encode($memoPdfUrl) ?>" target="_blank" class="btn btn-success fw-semibold px-4 py-2 mt-2">
+                        <a href="<?= Html::encode($memoPdfUrl) ?>" target="_blank" class="btn btn-primary fw-semibold px-4 py-2 mt-2">
                             <i class="bi bi-box-arrow-up-right me-1"></i> แตะเพื่อเปิดอ่านไฟล์ PDF
                         </a>
                     </div>
@@ -279,6 +278,42 @@ $this->registerJsFile('@web/js/pdf.min.js', [
         </section>
 
         <aside class="side-stack">
+            <!-- ข้อมูลบันทึก -->
+            <section class="content-card">
+                <h2>ข้อมูลบันทึก</h2>
+                <dl class="meta-list">
+                    <div><dt>สถานะ</dt><dd><span class="status-badge <?= Html::encode($statusClass) ?>"><?= Html::encode($statusLabel) ?></span></dd></div>
+                    <div><dt>เลขที่บันทึก</dt><dd class="font-monospace fw-semibold"><?= Html::encode($model->memo_no ?: '(ฉบับร่าง)') ?></dd></div>
+                    <div><dt>วันที่</dt><dd><?= $thaiDate($model->memo_date) ?></dd></div>
+                    <div><dt>กลุ่มงาน</dt><dd><?= Html::encode($model->department->name ?? '-') ?></dd></div>
+                    <div><dt>เรียน</dt><dd><?= Html::encode($model->to_text ?: '-') ?></dd></div>
+                    <div><dt>ผู้จัดทำ</dt><dd><?= Html::encode($model->creator ? $model->creator->displayName() : ($model->creator->username ?? '-')) ?></dd></div>
+                    <div><dt>ผู้พิจารณาปัจจุบัน</dt><dd><?= Html::encode($model->currentActor ? $model->currentActor->displayName() : ($model->currentActor->username ?? '-')) ?></dd></div>
+                </dl>
+            </section>
+
+            <!-- ไฟล์แนบ -->
+            <?php if ($model->originalPdfFile !== null || $model->attachmentFiles !== []): ?>
+                <section class="content-card">
+                    <h2>ไฟล์แนบ</h2>
+                    <div class="attachment-list">
+                        <?php if ($model->originalPdfFile !== null): ?>
+                            <?= Html::a('<i class="bi bi-file-earmark-pdf" aria-hidden="true"></i><span>PDF บันทึกข้อความต้นฉบับ</span>', Url::to('@web/' . ltrim($model->originalPdfFile->storage_path, '/'), true), [
+                                'class' => 'attachment-link',
+                                'target' => '_blank',
+                            ]) ?>
+                        <?php endif; ?>
+                        <?php foreach ($model->attachmentFiles as $file): ?>
+                            <?= Html::a('<i class="bi bi-file-earmark-pdf" aria-hidden="true"></i><span>' . Html::encode($file->original_name) . '</span>', Url::to('@web/' . ltrim($file->storage_path, '/'), true), [
+                                'class' => 'attachment-link',
+                                'target' => '_blank',
+                            ]) ?>
+                        <?php endforeach; ?>
+                    </div>
+                </section>
+            <?php endif; ?>
+
+            <!-- ตำแหน่งประทับลายเซ็น -->
             <?php if ($canAdjustStampPositions): ?>
                 <section class="content-card">
                     <h2>ตำแหน่งประทับลายเซ็น</h2>
@@ -319,39 +354,7 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                 </section>
             <?php endif; ?>
 
-            <section class="content-card">
-                <h2>ข้อมูลบันทึก</h2>
-                <dl class="meta-list">
-                    <div><dt>สถานะ</dt><dd><span class="status-badge <?= Html::encode($statusClass) ?>"><?= Html::encode($statusLabel) ?></span></dd></div>
-                    <div><dt>เลขที่บันทึก</dt><dd><?= Html::encode($model->memo_no ?: '-') ?></dd></div>
-                    <div><dt>วันที่</dt><dd><?= Html::encode($model->memo_date ?: '-') ?></dd></div>
-                    <div><dt>กลุ่มงาน</dt><dd><?= Html::encode($model->department->name ?? '-') ?></dd></div>
-                    <div><dt>เรียน</dt><dd><?= Html::encode($model->to_text ?: '-') ?></dd></div>
-                    <div><dt>ผู้จัดทำ</dt><dd><?= Html::encode($model->creator->username ?? '-') ?></dd></div>
-                    <div><dt>ผู้พิจารณาปัจจุบัน</dt><dd><?= Html::encode($model->currentActor->username ?? '-') ?></dd></div>
-                </dl>
-            </section>
-
-            <?php if ($model->originalPdfFile !== null || $model->attachmentFiles !== []): ?>
-                <section class="content-card">
-                    <h2>ไฟล์แนบ</h2>
-                    <div class="attachment-list">
-                        <?php if ($model->originalPdfFile !== null): ?>
-                            <?= Html::a('<i class="bi bi-file-earmark-pdf" aria-hidden="true"></i><span>PDF บันทึกข้อความต้นฉบับ</span>', Url::to('@web/' . ltrim($model->originalPdfFile->storage_path, '/'), true), [
-                                'class' => 'attachment-link',
-                                'target' => '_blank',
-                            ]) ?>
-                        <?php endif; ?>
-                        <?php foreach ($model->attachmentFiles as $file): ?>
-                            <?= Html::a('<i class="bi bi-file-earmark-pdf" aria-hidden="true"></i><span>' . Html::encode($file->original_name) . '</span>', Url::to('@web/' . ltrim($file->storage_path, '/'), true), [
-                                'class' => 'attachment-link',
-                                'target' => '_blank',
-                            ]) ?>
-                        <?php endforeach; ?>
-                    </div>
-                </section>
-            <?php endif; ?>
-
+            <!-- ดำเนินการ -->
             <section class="content-card action-card">
                 <h2>ดำเนินการ</h2>
                 <?php if ($canEdit): ?>
@@ -363,7 +366,7 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                 <?php if ($identity instanceof User && $identity->role === User::ROLE_STAFF && $model->status === Memo::STATUS_SUBMITTED_TO_STAFF): ?>
                     <?= Html::beginForm(['staff-review', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
                         <label class="form-label">ความเห็นหัวหน้ากลุ่มงาน</label>
-                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4]) ?>
+                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4, 'placeholder' => 'ระบุความเห็น...']) ?>
                         <?= Html::dropDownList('decision', 'submit_deputy', ['submit_deputy' => 'เสนอรอง ผอ.', 'submit_director' => 'เสนอ ผอ. โดยตรง', 'return' => 'ส่งกลับแก้ไข'], ['class' => 'form-select mt-2']) ?>
                         <?= Html::submitButton('<i class="bi bi-send-check" aria-hidden="true"></i><span>บันทึกผลพิจารณา</span>', ['class' => 'btn btn-primary w-100 mt-3']) ?>
                     <?= Html::endForm() ?>
@@ -372,7 +375,7 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                 <?php if ($identity instanceof User && $identity->role === User::ROLE_DEPUTY_DIRECTOR && $model->status === Memo::STATUS_SUBMITTED_TO_DEPUTY): ?>
                     <?= Html::beginForm(['deputy-review', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
                         <label class="form-label">ความเห็นรอง ผอ.</label>
-                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4]) ?>
+                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4, 'placeholder' => 'ระบุความเห็น...']) ?>
                         <?= Html::dropDownList('decision', 'submit_director', ['submit_director' => 'เสนอ ผอ.', 'return' => 'ส่งกลับแก้ไข'], ['class' => 'form-select mt-2']) ?>
                         <?= Html::submitButton('<i class="bi bi-send-check" aria-hidden="true"></i><span>บันทึกผลพิจารณา</span>', ['class' => 'btn btn-primary w-100 mt-3']) ?>
                     <?= Html::endForm() ?>
@@ -381,7 +384,7 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                 <?php if ($identity instanceof User && $identity->role === User::ROLE_DIRECTOR && $model->status === Memo::STATUS_SUBMITTED_TO_DIRECTOR): ?>
                     <?= Html::beginForm(['director-review', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
                         <label class="form-label">คำสั่ง/ความเห็น ผอ.</label>
-                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4]) ?>
+                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 4, 'placeholder' => 'ระบุคำสั่ง/ความเห็น...']) ?>
                         <?= Html::dropDownList('decision', 'approve', ['approve' => 'อนุมัติ/เห็นชอบ', 'return' => 'ส่งกลับแก้ไข'], ['class' => 'form-select mt-2']) ?>
                         <?= Html::submitButton('<i class="bi bi-check2-circle" aria-hidden="true"></i><span>บันทึกผลพิจารณา</span>', ['class' => 'btn btn-success w-100 mt-3']) ?>
                     <?= Html::endForm() ?>
@@ -390,13 +393,14 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                 <?php if ($identity instanceof User && (int) $model->created_by === (int) $identity->id && $model->status === Memo::STATUS_APPROVED): ?>
                     <?= Html::beginForm(['complete', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
                         <label class="form-label">หมายเหตุปิดเรื่อง</label>
-                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 3]) ?>
+                        <?= Html::textarea('comment', '', ['class' => 'form-control', 'rows' => 3, 'placeholder' => 'ระบุหมายเหตุ...']) ?>
                         <?= Html::submitButton('<i class="bi bi-check-circle" aria-hidden="true"></i><span>รับทราบและปิดเรื่อง</span>', ['class' => 'btn btn-success w-100 mt-3']) ?>
                     <?= Html::endForm() ?>
                 <?php endif; ?>
                 <p class="muted-text mt-3">เมื่อบันทึกผลพิจารณาแล้ว PDF ด้านซ้ายจะสร้างใหม่พร้อมความเห็นและลายเซ็นล่าสุด</p>
             </section>
 
+            <!-- ประวัติการดำเนินการ -->
             <section class="content-card">
                 <h2>ประวัติการดำเนินการ</h2>
                 <ol class="timeline">
@@ -406,7 +410,7 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                             <div class="timeline-body">
                                 <time><?= Html::encode($thaiDateTime($action->created_at)) ?></time>
                                 <p><?= Html::encode($action->comment ?: $action->action) ?></p>
-                                <span><?= Html::encode($action->actor->username ?? 'ระบบ') ?></span>
+                                <span><?= Html::encode($action->actor ? $action->actor->displayName() : ($action->actor->username ?? 'ระบบ')) ?></span>
                             </div>
                         </li>
                     <?php endforeach; ?>
@@ -450,6 +454,7 @@ $this->registerJs(<<<'JS'
     let fitScale = 1.0;
     let isRendering = false;
     let pendingPageNum = null;
+    let renderTask = null;
 
     function rounded(value) {
         return (Math.round(parseFloat(value || '0') * 10) / 10).toString();
@@ -479,7 +484,12 @@ $this->registerJs(<<<'JS'
     document.querySelectorAll('[data-stamp-control]').forEach((control) => {
         const type = control.dataset.stampControl;
         control.querySelectorAll('input[type="range"]').forEach((input) => {
-            input.addEventListener('input', () => updateStamp(type));
+            input.addEventListener('input', () => {
+                if (currentPageNum !== 1) {
+                    goToPage(1);
+                }
+                updateStamp(type);
+            });
         });
         updateStamp(type);
     });
@@ -504,6 +514,7 @@ $this->registerJs(<<<'JS'
             fitScale = availableWidth / unscaledViewport.width;
             const effectiveScale = currentScale * fitScale;
 
+            // Ultra-sharp Retina / High-DPI rendering (2x to 3x DPR buffer)
             const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 2), 3);
             const viewport = page.getViewport({ scale: effectiveScale * dpr });
 
@@ -513,6 +524,7 @@ $this->registerJs(<<<'JS'
             const cssHeight = Math.floor(viewport.height / dpr);
 
             if (currentScale > 1.0) {
+                // Allow panning / scroll when zoomed in
                 mainCanvas.style.width = cssWidth + 'px';
                 mainCanvas.style.height = cssHeight + 'px';
                 mainCanvas.style.maxWidth = 'none';
@@ -546,21 +558,31 @@ $this->registerJs(<<<'JS'
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
 
+            if (renderTask) {
+                try {
+                    renderTask.cancel();
+                } catch (e) {}
+            }
+
             const renderContext = {
                 canvasContext: ctx,
                 viewport: viewport,
             };
 
-            await page.render(renderContext).promise;
+            renderTask = page.render(renderContext);
+            await renderTask.promise;
 
+            // Calculate height aspect ratio for stamp overlay
             pageHeight = pageWidth * (unscaledViewport.height / unscaledViewport.width);
             document.querySelectorAll('[data-axis="y"]').forEach((input) => {
                 input.max = rounded(pageHeight);
             });
 
+            // ป้ายลายเซ็นแสดงหน้าแรก
             if (stampLayer) {
-                stampLayer.style.display = (num === 1) ? 'block' : 'none';
-                if (num === 1) {
+                const isFirstPage = (num === 1);
+                stampLayer.style.display = isFirstPage ? 'block' : 'none';
+                if (isFirstPage) {
                     document.querySelectorAll('[data-stamp-control]').forEach((control) => updateStamp(control.dataset.stampControl));
                 }
             }
@@ -572,9 +594,13 @@ $this->registerJs(<<<'JS'
             if (loadingIndicator) loadingIndicator.classList.add('d-none');
             canvasContainer.classList.remove('d-none');
         } catch (err) {
+            if (err && err.name === 'RenderingCancelledException') {
+                return;
+            }
             console.error('Error rendering page:', err);
         } finally {
             isRendering = false;
+            renderTask = null;
             if (pendingPageNum !== null) {
                 const nextNum = pendingPageNum;
                 pendingPageNum = null;
