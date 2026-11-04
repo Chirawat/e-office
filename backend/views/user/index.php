@@ -55,9 +55,10 @@ $currentUserId = (int) Yii::$app->user->id;
     </ul>
 
     <div class="content-card">
-        <?= GridView::widget([
-            'dataProvider' => $dataProvider,
-            'tableOptions' => ['class' => 'table table-hover align-middle'],
+        <div class="table-responsive">
+            <?= GridView::widget([
+                'dataProvider' => $dataProvider,
+                'tableOptions' => ['class' => 'table table-hover align-middle mb-0'],
             'columns' => [
                 'id',
                 [
@@ -191,5 +192,6 @@ $currentUserId = (int) Yii::$app->user->id;
                 ],
             ],
         ]) ?>
+        </div>
     </div>
 </div>

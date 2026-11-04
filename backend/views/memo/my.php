@@ -46,24 +46,25 @@ $statusBadge = static function (Memo $model): string {
     </div>
 
     <div class="content-card">
-        <?= GridView::widget([
-            'dataProvider' => $dataProvider,
-            'tableOptions' => ['class' => 'table table-hover align-middle'],
-            'summary' => 'แสดงรายการที่ {begin}-{end} จากทั้งหมด {totalCount} รายการ',
-            'emptyText' => 'ยังไม่มีงานบันทึกที่ต้องดำเนินการ',
-            'columns' => [
-                ['attribute' => 'memo_no', 'value' => static fn (Memo $model): string => $model->memo_no ?: '-'],
-                [
-                    'attribute' => 'subject',
-                    'format' => 'raw',
-                    'value' => static fn (Memo $model): string => Html::a(Html::encode($model->subject), ['view', 'id' => $model->id]),
+        <div class="table-responsive">
+            <?= GridView::widget([
+                'dataProvider' => $dataProvider,
+                'tableOptions' => ['class' => 'table table-hover align-middle mb-0'],
+                'summary' => 'แสดงรายการที่ {begin}-{end} จากทั้งหมด {totalCount} รายการ',
+                'emptyText' => 'ยังไม่มีงานบันทึกที่ต้องดำเนินการ',
+                'columns' => [
+                    ['attribute' => 'memo_no', 'value' => static fn (Memo $model): string => $model->memo_no ?: '-'],
+                    [
+                        'attribute' => 'subject',
+                        'format' => 'raw',
+                        'value' => static fn (Memo $model): string => Html::a(Html::encode($model->subject), ['view', 'id' => $model->id]),
+                    ],
+                    ['attribute' => 'department_id', 'value' => static fn (Memo $model): string => $model->department->name ?? '-'],
+                    ['label' => 'ผู้จัดทำ', 'value' => static fn (Memo $model): string => $model->creator->username ?? '-'],
+                    ['label' => 'ผู้รับงานปัจจุบัน', 'value' => static fn (Memo $model): string => $model->currentActor->username ?? '-'],
+                    ['attribute' => 'status', 'format' => 'raw', 'value' => $statusBadge],
                 ],
-                ['attribute' => 'department_id', 'value' => static fn (Memo $model): string => $model->department->name ?? '-'],
-                ['label' => 'ผู้จัดทำ', 'value' => static fn (Memo $model): string => $model->creator->username ?? '-'],
-                ['label' => 'ผู้รับงานปัจจุบัน', 'value' => static fn (Memo $model): string => $model->currentActor->username ?? '-'],
-                ['attribute' => 'status', 'format' => 'raw', 'value' => $statusBadge],
-            ],
-        ]) ?>
+            ]) ?>
+        </div>
     </div>
 </div>
-?>
