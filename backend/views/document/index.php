@@ -30,6 +30,7 @@ $this->params['breadcrumbs'][] = $this->title;
 $this->registerCssFile('@web/css/eoffice.css', ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
 $identity = Yii::$app->user->identity;
 $canCreateDocument = $identity instanceof User && $identity->canRegisterDocument();
+$canViewStatus = $identity instanceof User && $identity->role !== User::ROLE_GENERAL_USER;
 
 $this->registerCss('
 /* ป้องกันการล้นจอแนวนอนในทุกระดับ */
@@ -308,7 +309,7 @@ $pagination = $dataProvider->getPagination();
 
                             <!-- Mail Content Body -->
                             <div class="apple-mail-body">
-                                <!-- Line 1: Sender Name + Date (Apple Mail header style) -->
+                                <!-- Line 1: Sender Name + Status + Date (Apple Mail header style) -->
                                 <div class="apple-mail-header">
                                     <div class="apple-mail-sender">
                                         <?= Html::encode($senderText) ?>
@@ -316,8 +317,19 @@ $pagination = $dataProvider->getPagination();
                                             <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-normal py-0 px-1 ms-1" style="font-size: 0.7rem;">มอบหมายถึงท่าน</span>
                                         <?php endif; ?>
                                     </div>
-                                    <div class="apple-mail-date">
-                                        <?= $thaiDate($doc->receive_date) ?>
+                                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                        <?php if ($canViewStatus): ?>
+                                            <?php
+                                            $docStatusLabel = Document::statusOptions()[$doc->status] ?? $doc->status;
+                                            $docStatusClass = 'status-badge-' . str_replace('_', '-', $doc->status);
+                                            ?>
+                                            <span class="status-badge <?= Html::encode($docStatusClass) ?>" style="font-size: 0.72rem; padding: 2px 8px; min-height: 22px; line-height: 1.2;">
+                                                <?= Html::encode($docStatusLabel) ?>
+                                            </span>
+                                        <?php endif; ?>
+                                        <div class="apple-mail-date">
+                                            <?= $thaiDate($doc->receive_date) ?>
+                                        </div>
                                     </div>
                                 </div>
 
