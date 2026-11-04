@@ -15,6 +15,15 @@ use yii\helpers\Url;
 /** @var ActiveDataProvider $memoDataProvider */
 /** @var array<string, int> $stats */
 /** @var string $roleLabel */
+/** @var int $unreadDocCount */
+/** @var int $unreadMemoCount */
+/** @var array<int, bool> $readDocMap */
+/** @var array<int, bool> $readMemoMap */
+
+$unreadDocCount = $unreadDocCount ?? 0;
+$unreadMemoCount = $unreadMemoCount ?? 0;
+$readDocMap = $readDocMap ?? [];
+$readMemoMap = $readMemoMap ?? [];
 
 $this->title = 'โต๊ะทำงาน (งานของฉัน)';
 $this->params['breadcrumbs'][] = $this->title;
@@ -108,6 +117,14 @@ html, body, .eoffice-body, main, .eoffice-main, .eoffice-container, .eoffice-pag
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
     margin-bottom: 2px !important;
+}
+.apple-mail-subject.is-read {
+    font-weight: 400 !important;
+    color: #64748b !important;
+}
+.apple-mail-subject.is-unread {
+    font-weight: 700 !important;
+    color: #0f172a !important;
 }
 .apple-mail-snippet {
     font-size: 0.8rem;
@@ -217,14 +234,14 @@ $memoStatusBadge = static function (Memo $model): string {
                     <button class="nav-link erp-nav-tab py-2 px-3 active fw-bold d-inline-flex align-items-center gap-2 small" id="doc-tab-btn" data-bs-toggle="tab" data-bs-target="#tab-doc" type="button" role="tab" aria-controls="tab-doc" aria-selected="true">
                         <i class="bi bi-inbox-fill text-primary"></i>
                         <span>หนังสือเข้า</span>
-                        <span class="tab-badge <?= count($docModels) > 0 ? 'bg-primary text-white' : '' ?>"><?= count($docModels) ?></span>
+                        <span class="tab-badge <?= $unreadDocCount > 0 ? 'bg-primary text-white' : '' ?>" title="จำนวนหนังสือเข้าที่ยังไม่ได้เปิดอ่าน"><?= $unreadDocCount ?></span>
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link erp-nav-tab py-2 px-3 fw-bold d-inline-flex align-items-center gap-2 small" id="memo-tab-btn" data-bs-toggle="tab" data-bs-target="#tab-memo" type="button" role="tab" aria-controls="tab-memo" aria-selected="false">
                         <i class="bi bi-journal-bookmark-fill text-teal" style="color: #0f766e;"></i>
                         <span>บันทึกข้อความ</span>
-                        <span class="tab-badge <?= count($memoModels) > 0 ? 'bg-success text-white' : '' ?>"><?= count($memoModels) ?></span>
+                        <span class="tab-badge <?= $unreadMemoCount > 0 ? 'bg-success text-white' : '' ?>" title="จำนวนบันทึกข้อความที่ยังไม่ได้เปิดอ่าน"><?= $unreadMemoCount ?></span>
                     </button>
                 </li>
             </ul>
@@ -258,11 +275,12 @@ $memoStatusBadge = static function (Memo $model): string {
                                 $senderText = trim((string) $doc->sender) ?: 'หนังสือเข้า';
                                 $initial = $getInitial($senderText);
                                 $isUrgent = in_array($doc->urgency, [Document::URGENCY_URGENT, Document::URGENCY_VERY_URGENT, Document::URGENCY_MOST_URGENT], true);
+                                $isRead = isset($readDocMap[(int) $doc->id]);
                                 ?>
                                 <a href="<?= $viewUrl ?>" class="list-group-item list-group-item-action py-3 px-3 border-bottom d-flex align-items-start gap-3 text-decoration-none position-relative apple-mail-row">
-                                    <!-- Blue Dot (Unread/Action Pending Indicator) -->
+                                    <!-- Blue Dot (Unread: แสดงจุดสีฟ้า / Read: ซ่อนแบบโปร่งใสเพื่อรักษาตำแหน่ง) -->
                                     <div class="pt-2 flex-shrink-0 d-flex align-items-center justify-content-center" style="width: 14px;">
-                                        <span class="apple-blue-dot"></span>
+                                        <span class="apple-blue-dot <?= $isRead ? 'opacity-0' : '' ?>" title="<?= $isRead ? 'เปิดอ่านแล้ว' : 'ยังไม่ได้เปิดอ่าน' ?>"></span>
                                     </div>
 
                                     <!-- Circular Avatar Badge with Initial / Icon -->
@@ -284,8 +302,8 @@ $memoStatusBadge = static function (Memo $model): string {
                                             </div>
                                         </div>
 
-                                        <!-- Line 2: Subject (Bold Title) -->
-                                        <div class="apple-mail-subject">
+                                        <!-- Line 2: Subject (Unread: ตัวหนา / Read: ตัวปกติสีเทา) -->
+                                        <div class="apple-mail-subject <?= $isRead ? 'is-read fw-normal text-muted' : 'is-unread fw-bold text-dark' ?>">
                                             <?php if ($doc->urgency === Document::URGENCY_MOST_URGENT || $doc->urgency === Document::URGENCY_VERY_URGENT): ?>
                                                 <span class="badge bg-danger text-white py-0 px-1 me-1" style="font-size: 0.72rem;">ด่วนมาก</span>
                                             <?php elseif ($doc->urgency === Document::URGENCY_URGENT): ?>
@@ -340,11 +358,12 @@ $memoStatusBadge = static function (Memo $model): string {
                                 // ผู้ส่ง / สายเสนอ
                                 $senderName = $isCreator ? $identity->displayName() : ($memo->creator ? $memo->creator->displayName() : 'บันทึกข้อความ');
                                 $initial = $getInitial($senderName);
+                                $isMemoRead = isset($readMemoMap[(int) $memo->id]);
                                 ?>
                                 <a href="<?= $targetUrl ?>" class="list-group-item list-group-item-action py-3 px-3 border-bottom d-flex align-items-start gap-3 text-decoration-none position-relative apple-mail-row">
-                                    <!-- Blue Dot (Unread/Action Pending Indicator) -->
+                                    <!-- Blue Dot (Unread: แสดงจุดสีฟ้า / Read: ซ่อนแบบโปร่งใสเพื่อรักษาตำแหน่ง) -->
                                     <div class="pt-2 flex-shrink-0 d-flex align-items-center justify-content-center" style="width: 14px;">
-                                        <span class="<?= $isDraft ? 'apple-blue-dot bg-warning' : 'apple-blue-dot' ?>"></span>
+                                        <span class="<?= $isDraft ? 'apple-blue-dot bg-warning' : 'apple-blue-dot' ?> <?= $isMemoRead ? 'opacity-0' : '' ?>" title="<?= $isMemoRead ? 'เปิดอ่านแล้ว' : 'ยังไม่ได้เปิดอ่าน' ?>"></span>
                                     </div>
 
                                     <!-- Circular Avatar Badge with Initial / Icon -->
@@ -369,8 +388,8 @@ $memoStatusBadge = static function (Memo $model): string {
                                             </div>
                                         </div>
 
-                                        <!-- Line 2: Subject (Bold Title) -->
-                                        <div class="apple-mail-subject">
+                                        <!-- Line 2: Subject (Unread: ตัวหนา / Read: ตัวปกติสีเทา) -->
+                                        <div class="apple-mail-subject <?= $isMemoRead ? 'is-read fw-normal text-muted' : 'is-unread fw-bold text-dark' ?>">
                                             <?= $memoStatusBadge($memo) ?>
                                             <span class="ms-1"><?= Html::encode($memo->subject) ?></span>
                                         </div>

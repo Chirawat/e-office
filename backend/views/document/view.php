@@ -31,12 +31,26 @@ html, body, .eoffice-body, main, .eoffice-main, .eoffice-container, .eoffice-pag
 }
 
 @media (max-width: 991.98px) {
+    .eoffice-main {
+        padding: 0 0 24px 0 !important;
+    }
+    .eoffice-page {
+        padding: 0 0 24px 0 !important;
+    }
+    .eoffice-container {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+    }
     .document-workspace {
         display: flex !important;
         flex-direction: column !important;
         align-items: stretch !important;
         width: 100% !important;
-        gap: 16px !important;
+        gap: 12px !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
     .document-workspace > * {
         width: 100% !important;
@@ -45,34 +59,31 @@ html, body, .eoffice-body, main, .eoffice-main, .eoffice-container, .eoffice-pag
     .pdf-card-section {
         width: 100% !important;
         max-width: 100% !important;
-    }
-}
-
-@media (max-width: 575.98px) {
-    .eoffice-container {
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-    }
-    .document-workspace {
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-    .pdf-card-section {
         border-radius: 0 !important;
-        border-left: 0 !important;
-        border-right: 0 !important;
-        width: 100% !important;
-        max-width: 100% !important;
+        border: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
     }
     .pdf-preview-frame {
         border-radius: 0 !important;
-        border-left: 0 !important;
-        border-right: 0 !important;
+        border: 0 !important;
+        width: 100% !important;
     }
     .pdf-canvas-wrapper {
         padding: 0 !important;
+        margin: 0 !important;
         width: 100% !important;
-        background: #334155 !important;
+        background: #e2e8f0 !important;
+        min-height: auto !important;
+    }
+    .pdf-viewer-controls {
+        padding: 6px 12px !important;
+        background-color: #f8fafc !important;
+        border-radius: 0 !important;
+    }
+    .pdf-viewer-header {
+        padding: 8px 12px !important;
+        border-radius: 0 !important;
     }
     .pdf-preview-canvas {
         display: block !important;
@@ -86,11 +97,13 @@ html, body, .eoffice-body, main, .eoffice-main, .eoffice-container, .eoffice-pag
         display: block !important;
         width: 100% !important;
         max-width: 100% !important;
+        height: auto !important;
         border-radius: 0 !important;
+        margin: 0 auto !important;
     }
     .side-stack {
-        padding-left: 8px !important;
-        padding-right: 8px !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
     }
 }
 ');
@@ -290,10 +303,10 @@ if ($previewPdfUrl) {
                     </div>
 
                     <!-- Canvas Area -->
-                    <div class="pdf-canvas-wrapper text-center p-0 p-sm-2" id="pdf-canvas-wrapper" style="overflow-x: auto; background: #475569; min-height: 480px; -webkit-overflow-scrolling: touch;">
-                        <div id="pdf-loading-indicator" class="py-5 text-white">
-                            <div class="spinner-border text-light mb-2" role="status"></div>
-                            <div class="small">กำลังโหลดเอกสาร PDF คมชัดสูง...</div>
+                    <div class="pdf-canvas-wrapper text-center p-0" id="pdf-canvas-wrapper" style="overflow-x: auto; background: #e2e8f0; min-height: auto; -webkit-overflow-scrolling: touch;">
+                        <div id="pdf-loading-indicator" class="py-5 text-dark">
+                            <div class="spinner-border text-primary mb-2" role="status"></div>
+                            <div class="small fw-semibold">กำลังโหลดเอกสาร PDF คมชัดสูง...</div>
                         </div>
 
                         <div id="pdf-error-fallback" class="d-none py-5 bg-white rounded p-4 text-center my-3 shadow-sm mx-auto" style="max-width: 500px;">
@@ -305,11 +318,11 @@ if ($previewPdfUrl) {
                             </a>
                         </div>
 
-                        <div class="pdf-preview-canvas d-none d-inline-block position-relative shadow rounded" id="pdf-page-container" 
+                        <div class="pdf-preview-canvas d-none position-relative" id="pdf-page-container" 
                              data-page-width="216" data-page-height="297" 
                              data-pdf-url="<?= Html::encode($previewPdfUrl) ?>"
                              data-worker-url="<?= Url::to('@web/js/pdf.worker.min.js') ?>">
-                            <canvas id="pdf-main-canvas" class="pdf-page-image rounded" style="display: block; max-width: 100%; height: auto; background: #fff;"></canvas>
+                            <canvas id="pdf-main-canvas" class="pdf-page-image" style="display: block; max-width: 100%; height: auto; background: #fff;"></canvas>
 
                             <?php if ($canAdjustStampPositions): ?>
                                 <div class="stamp-preview-layer" aria-hidden="true">
@@ -370,7 +383,7 @@ if ($previewPdfUrl) {
                     <h2>ตำแหน่งตราประทับ</h2>
                     <?= Html::beginForm(['update-stamp-positions', 'id' => $model->id], 'post', ['class' => 'stamp-position-form']) ?>
                         <?= $csrf ?>
-                        <p class="muted-text">หน่วยเป็นมิลลิเมตรจากซ้าย/บนของหน้าแรก ปรับแล้วระบบจะสร้าง PDF ประทับตราใหม่ให้อัตโนมัติ</p>
+                        <p class="muted-text">ตรารับหนังสือจะอยู่หน้าแรก ส่วนตรากลุ่มงาน/รอง ผอ./ผอ. จะอยู่หน้าสุดท้าย ปรับแล้วระบบจะสร้าง PDF ประทับตราใหม่ให้อัตโนมัติ</p>
                         <?php foreach ($stampPositionDefaults as $type => $config): ?>
                             <div class="stamp-position-row">
                                 <strong><?= Html::encode($config['label']) ?></strong>
@@ -620,7 +633,14 @@ $this->registerJs(<<<'JS'
     document.querySelectorAll('[data-stamp-control]').forEach((control) => {
         const type = control.dataset.stampControl;
         control.querySelectorAll('input[type="range"]').forEach((input) => {
-            input.addEventListener('input', () => updateStamp(type));
+            input.addEventListener('input', () => {
+                if (type === 'receive' && currentPageNum !== 1) {
+                    goToPage(1);
+                } else if (type !== 'receive' && currentPageNum !== totalPages) {
+                    goToPage(totalPages);
+                }
+                updateStamp(type);
+            });
         });
         updateStamp(type);
     });
@@ -632,13 +652,12 @@ $this->registerJs(<<<'JS'
         try {
             const page = await pdfDoc.getPage(num);
             const wrapper = document.getElementById('pdf-canvas-wrapper');
-            // Full width utilization for mobile screens
+            const isMobile = window.innerWidth < 992;
             let availableWidth = (wrapper && wrapper.clientWidth > 100)
                 ? wrapper.clientWidth
                 : (window.innerWidth || document.documentElement.clientWidth || 360);
 
-            // On desktop/tablet, leave small breathing padding; on mobile (< 576px), use 100% full width
-            if (window.innerWidth >= 576) {
+            if (!isMobile) {
                 availableWidth = Math.max(availableWidth - 16, 280);
             }
             const unscaledViewport = page.getViewport({ scale: 1 });
@@ -666,7 +685,7 @@ $this->registerJs(<<<'JS'
                     canvasContainer.style.maxWidth = 'none';
                 }
             } else {
-                if (window.innerWidth < 576) {
+                if (isMobile) {
                     mainCanvas.style.width = '100%';
                     mainCanvas.style.height = 'auto';
                     mainCanvas.style.maxWidth = '100%';
@@ -710,10 +729,31 @@ $this->registerJs(<<<'JS'
                 input.max = rounded(pageHeight);
             });
 
-            // If on page 1, show stamp layer if present, otherwise hide
+            // ตรารับหนังสือแสดงหน้าแรก ส่วนตรากลุ่มงาน/รอง ผอ./ผอ. แสดงหน้าสุดท้าย
             if (stampLayer) {
-                stampLayer.style.display = (num === 1) ? 'block' : 'none';
-                if (num === 1) {
+                const isFirstPage = (num === 1);
+                const isLastPage = (num === totalPages);
+
+                const receiveBox = stampLayer.querySelector('[data-stamp-box="receive"]');
+                const deptBox = stampLayer.querySelector('[data-stamp-box="department"]');
+                const deputyBox = stampLayer.querySelector('[data-stamp-box="deputy_comment"]');
+                const directorBox = stampLayer.querySelector('[data-stamp-box="director_order"]');
+
+                if (receiveBox) {
+                    receiveBox.style.display = isFirstPage ? 'grid' : 'none';
+                }
+                if (deptBox) {
+                    deptBox.style.display = isLastPage ? 'grid' : 'none';
+                }
+                if (deputyBox) {
+                    deputyBox.style.display = isLastPage ? 'grid' : 'none';
+                }
+                if (directorBox) {
+                    directorBox.style.display = isLastPage ? 'grid' : 'none';
+                }
+
+                stampLayer.style.display = (isFirstPage || isLastPage) ? 'block' : 'none';
+                if (isFirstPage || isLastPage) {
                     document.querySelectorAll('[data-stamp-control]').forEach((control) => updateStamp(control.dataset.stampControl));
                 }
             }

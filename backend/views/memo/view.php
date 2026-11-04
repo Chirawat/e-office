@@ -26,12 +26,26 @@ html, body, .eoffice-body, main, .eoffice-main, .eoffice-container, .eoffice-pag
 }
 
 @media (max-width: 991.98px) {
+    .eoffice-main {
+        padding: 0 0 24px 0 !important;
+    }
+    .eoffice-page {
+        padding: 0 0 24px 0 !important;
+    }
+    .eoffice-container {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+    }
     .document-workspace {
         display: flex !important;
         flex-direction: column !important;
         align-items: stretch !important;
         width: 100% !important;
-        gap: 16px !important;
+        gap: 12px !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
     .document-workspace > * {
         width: 100% !important;
@@ -40,34 +54,31 @@ html, body, .eoffice-body, main, .eoffice-main, .eoffice-container, .eoffice-pag
     .pdf-card-section {
         width: 100% !important;
         max-width: 100% !important;
-    }
-}
-
-@media (max-width: 575.98px) {
-    .eoffice-container {
-        padding-left: 0 !important;
-        padding-right: 0 !important;
-    }
-    .document-workspace {
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-    .pdf-card-section {
         border-radius: 0 !important;
-        border-left: 0 !important;
-        border-right: 0 !important;
-        width: 100% !important;
-        max-width: 100% !important;
+        border: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
     }
     .pdf-preview-frame {
         border-radius: 0 !important;
-        border-left: 0 !important;
-        border-right: 0 !important;
+        border: 0 !important;
+        width: 100% !important;
     }
     .pdf-canvas-wrapper {
         padding: 0 !important;
+        margin: 0 !important;
         width: 100% !important;
-        background: #334155 !important;
+        background: #e2e8f0 !important;
+        min-height: auto !important;
+    }
+    .pdf-viewer-controls {
+        padding: 6px 12px !important;
+        background-color: #f8fafc !important;
+        border-radius: 0 !important;
+    }
+    .pdf-viewer-header {
+        padding: 8px 12px !important;
+        border-radius: 0 !important;
     }
     .pdf-preview-canvas {
         display: block !important;
@@ -81,11 +92,13 @@ html, body, .eoffice-body, main, .eoffice-main, .eoffice-container, .eoffice-pag
         display: block !important;
         width: 100% !important;
         max-width: 100% !important;
+        height: auto !important;
         border-radius: 0 !important;
+        margin: 0 auto !important;
     }
     .side-stack {
-        padding-left: 8px !important;
-        padding-right: 8px !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
     }
 }
 ');
@@ -166,7 +179,7 @@ $this->registerJsFile('@web/js/pdf.min.js', [
     </div>
 
     <div class="document-workspace">
-        <section class="content-card">
+        <section class="content-card pdf-card-section p-0 border-0 shadow-sm overflow-hidden">
             <div class="pdf-toolbar">
                 <div>
                     <strong>PDF บันทึกข้อความ</strong>
@@ -225,10 +238,10 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                 </div>
 
                 <!-- Canvas Area -->
-                <div class="pdf-canvas-wrapper text-center p-2 p-md-3" id="pdf-canvas-wrapper" style="overflow-x: auto; background: #64748b; min-height: 480px;">
-                    <div id="pdf-loading-indicator" class="py-5 text-white">
-                        <div class="spinner-border text-light mb-2" role="status"></div>
-                        <div>กำลังโหลดเอกสาร PDF...</div>
+                <div class="pdf-canvas-wrapper text-center p-0" id="pdf-canvas-wrapper" style="overflow-x: auto; background: #e2e8f0; min-height: auto; -webkit-overflow-scrolling: touch;">
+                    <div id="pdf-loading-indicator" class="py-5 text-dark">
+                        <div class="spinner-border text-primary mb-2" role="status"></div>
+                        <div class="small fw-semibold">กำลังโหลดเอกสาร PDF...</div>
                     </div>
 
                     <div id="pdf-error-fallback" class="d-none py-5 bg-white rounded p-4 text-center my-3 shadow-sm mx-auto" style="max-width: 500px;">
@@ -240,11 +253,11 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                         </a>
                     </div>
 
-                    <div class="pdf-preview-canvas d-none d-inline-block position-relative shadow-lg rounded" id="pdf-page-container" 
+                    <div class="pdf-preview-canvas d-none position-relative" id="pdf-page-container" 
                          data-page-width="216" data-page-height="297" 
                          data-pdf-url="<?= Html::encode($memoPdfUrl) ?>"
                          data-worker-url="<?= Url::to('@web/js/pdf.worker.min.js') ?>">
-                        <canvas id="pdf-main-canvas" class="pdf-page-image rounded" style="display: block; max-width: 100%; height: auto; background: #fff;"></canvas>
+                        <canvas id="pdf-main-canvas" class="pdf-page-image" style="display: block; max-width: 100%; height: auto; background: #fff;"></canvas>
 
                         <?php if ($canAdjustStampPositions): ?>
                             <div class="stamp-preview-layer" aria-hidden="true">
@@ -478,11 +491,12 @@ $this->registerJs(<<<'JS'
         try {
             const page = await pdfDoc.getPage(num);
             const wrapper = document.getElementById('pdf-canvas-wrapper');
+            const isMobile = window.innerWidth < 992;
             let availableWidth = (wrapper && wrapper.clientWidth > 100)
                 ? wrapper.clientWidth
                 : (window.innerWidth || document.documentElement.clientWidth || 360);
 
-            if (window.innerWidth >= 576) {
+            if (!isMobile) {
                 availableWidth = Math.max(availableWidth - 16, 280);
             }
             const unscaledViewport = page.getViewport({ scale: 1 });
@@ -508,7 +522,7 @@ $this->registerJs(<<<'JS'
                     canvasContainer.style.maxWidth = 'none';
                 }
             } else {
-                if (window.innerWidth < 576) {
+                if (isMobile) {
                     mainCanvas.style.width = '100%';
                     mainCanvas.style.height = 'auto';
                     mainCanvas.style.maxWidth = '100%';

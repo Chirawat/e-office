@@ -80,8 +80,14 @@ class PdfStampService extends Component
             $pdf->AddPage($orientation, [$size['width'], $size['height']]);
             $pdf->useTemplate($templateId, 0, 0, $size['width'], $size['height'], true);
 
+            // ตราประทับลงรับหนังสือ ให้ประทับไว้ที่หน้าแรกเสมอ
             if ($pageNo === 1) {
-                $this->drawFirstPageStamps($pdf, $document, (float) $size['width'], (float) $size['height']);
+                $this->drawReceiveStampPage($pdf, $document, (float) $size['width'], (float) $size['height']);
+            }
+
+            // ตราประทับแยกกลุ่มงาน, ความเห็นรอง ผอ. และ คำสั่ง ผอ. ให้อยู่หน้าสุดท้ายเสมอ
+            if ($pageNo === $pageCount) {
+                $this->drawLastPageStamps($pdf, $document, (float) $size['width'], (float) $size['height']);
             }
         }
 
@@ -148,12 +154,15 @@ class PdfStampService extends Component
         return $this->webRelativePath($outputPath);
     }
 
-    private function drawFirstPageStamps(Fpdi $pdf, Document $document, float $pageWidth, float $pageHeight): void
+    private function drawReceiveStampPage(Fpdi $pdf, Document $document, float $pageWidth, float $pageHeight): void
     {
         $receivePosition = $this->stampPosition($document, DocumentStamp::TYPE_RECEIVE, max(118, $pageWidth - 72), 14, $pageWidth, $pageHeight);
-        $departmentPosition = $this->stampPosition($document, DocumentStamp::TYPE_DEPARTMENT, 18, max(190, $pageHeight - 78), $pageWidth, $pageHeight);
-
         $this->drawReceiveStamp($pdf, $document, $receivePosition['x'], $receivePosition['y']);
+    }
+
+    private function drawLastPageStamps(Fpdi $pdf, Document $document, float $pageWidth, float $pageHeight): void
+    {
+        $departmentPosition = $this->stampPosition($document, DocumentStamp::TYPE_DEPARTMENT, 18, max(190, $pageHeight - 78), $pageWidth, $pageHeight);
         $this->drawDepartmentStamp($pdf, $document, $departmentPosition['x'], $departmentPosition['y']);
 
         $deputyStamp = $this->latestStamp($document, DocumentStamp::TYPE_DEPUTY_COMMENT);

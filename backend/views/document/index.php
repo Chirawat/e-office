@@ -16,7 +16,14 @@ use yii\helpers\Url;
 /** @var Department[] $departments */
 /** @var int $countAll */
 /** @var array<int, int> $deptCounts */
+/** @var int $unreadCountAll */
+/** @var array<int, int> $unreadDeptCounts */
 /** @var int[] $myAssignedDocIds */
+/** @var array<int, bool> $readDocMap */
+
+$unreadCountAll = $unreadCountAll ?? $countAll;
+$unreadDeptCounts = $unreadDeptCounts ?? $deptCounts;
+$readDocMap = $readDocMap ?? [];
 
 $this->title = 'ทะเบียนหนังสือเข้า';
 $this->params['breadcrumbs'][] = $this->title;
@@ -109,6 +116,14 @@ html, body, .eoffice-body, main, .eoffice-main, .eoffice-container, .eoffice-pag
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
     margin-bottom: 2px !important;
+}
+.apple-mail-subject.is-read {
+    font-weight: 400 !important;
+    color: #64748b !important;
+}
+.apple-mail-subject.is-unread {
+    font-weight: 700 !important;
+    color: #0f172a !important;
 }
 .apple-mail-snippet {
     font-size: 0.8rem;
@@ -237,21 +252,21 @@ $pagination = $dataProvider->getPagination();
                        class="nav-link erp-nav-tab py-2 px-3 fw-bold d-inline-flex align-items-center gap-2 small <?= $departmentId === null ? 'active' : '' ?>">
                         <i class="bi bi-globe2 text-primary"></i>
                         <span>ทั้งหมด</span>
-                        <span class="tab-badge <?= $countAll > 0 ? 'bg-primary text-white' : '' ?> font-monospace"><?= $countAll ?></span>
+                        <span class="tab-badge <?= $unreadCountAll > 0 ? 'bg-primary text-white' : '' ?> font-monospace" title="จำนวนหนังสือที่ยังไม่ได้เปิดอ่าน"><?= $unreadCountAll ?></span>
                     </a>
                 </li>
                 <!-- แท็บ: แต่ละกลุ่มงาน -->
                 <?php foreach ($departments as $dept): ?>
                     <?php
                     $isActiveTab = ($departmentId === (int) $dept->id);
-                    $dCount = $deptCounts[(int) $dept->id] ?? 0;
+                    $dUnreadCount = $unreadDeptCounts[(int) $dept->id] ?? 0;
                     ?>
                     <li class="nav-item" role="presentation">
                         <a href="<?= Url::to(['index', 'department_id' => $dept->id, 'q' => $keyword]) ?>" 
                            class="nav-link erp-nav-tab py-2 px-3 fw-bold d-inline-flex align-items-center gap-2 small <?= $isActiveTab ? 'active' : '' ?>">
                             <i class="bi bi-building text-secondary"></i>
                             <span><?= Html::encode($dept->name) ?></span>
-                            <span class="tab-badge <?= $dCount > 0 ? ($isActiveTab ? 'bg-primary text-white' : '') : '' ?> font-monospace"><?= $dCount ?></span>
+                            <span class="tab-badge <?= $dUnreadCount > 0 ? ($isActiveTab ? 'bg-primary text-white' : '') : '' ?> font-monospace" title="จำนวนหนังสือที่ยังไม่ได้เปิดอ่าน"><?= $dUnreadCount ?></span>
                         </a>
                     </li>
                 <?php endforeach; ?>
@@ -276,11 +291,12 @@ $pagination = $dataProvider->getPagination();
                         $senderText = trim((string) $doc->sender) ?: 'หนังสือเข้า';
                         $initial = $getInitial($senderText);
                         $isMy = in_array((int) $doc->id, $myAssignedDocIds, true);
+                        $isRead = isset($readDocMap[(int) $doc->id]);
                         ?>
                         <a href="<?= $viewUrl ?>" class="list-group-item list-group-item-action py-3 px-3 border-bottom d-flex align-items-start gap-3 text-decoration-none position-relative apple-mail-row">
-                            <!-- Blue Dot (Unread/Action/My Assigned Indicator) -->
+                            <!-- Blue Dot (Unread: แสดงจุดสีฟ้า / Read: ซ่อนแบบโปร่งใสเพื่อรักษาตำแหน่ง) -->
                             <div class="pt-2 flex-shrink-0 d-flex align-items-center justify-content-center" style="width: 14px;">
-                                <span class="<?= $isMy ? 'apple-blue-dot' : 'rounded-circle bg-secondary bg-opacity-25' ?>" style="width: 8px; height: 8px; display: inline-block;"></span>
+                                <span class="apple-blue-dot <?= $isRead ? 'opacity-0' : '' ?>" title="<?= $isRead ? 'เปิดอ่านแล้ว' : 'ยังไม่ได้เปิดอ่าน' ?>"></span>
                             </div>
 
                             <!-- Circular Avatar Badge with Initial -->
@@ -305,8 +321,8 @@ $pagination = $dataProvider->getPagination();
                                     </div>
                                 </div>
 
-                                <!-- Line 2: Subject (Bold Title) -->
-                                <div class="apple-mail-subject">
+                                <!-- Line 2: Subject (Unread: ตัวหนา / Read: ตัวปกติสีเทา) -->
+                                <div class="apple-mail-subject <?= $isRead ? 'is-read fw-normal text-muted' : 'is-unread fw-bold text-dark' ?>">
                                     <?php if ($doc->urgency === Document::URGENCY_MOST_URGENT || $doc->urgency === Document::URGENCY_VERY_URGENT): ?>
                                         <span class="badge bg-danger text-white py-0 px-1 me-1" style="font-size: 0.72rem;">ด่วนมาก</span>
                                     <?php elseif ($doc->urgency === Document::URGENCY_URGENT): ?>

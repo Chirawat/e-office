@@ -140,4 +140,9 @@ class Memo extends ActiveRecord
     {
         return $this->hasOne(User::class, ['id' => 'current_actor_id']);
     }
+
+    public function getMemoReads(): ActiveQuery
+    {
+        return $this->hasMany(MemoRead::class, ['memo_id' => 'id']);
+    }
 }

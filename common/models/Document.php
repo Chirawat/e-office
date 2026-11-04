@@ -139,6 +139,11 @@ class Document extends ActiveRecord
         return $this->hasMany(WorkflowAction::class, ['document_id' => 'id'])->orderBy(['created_at' => SORT_ASC]);
     }
 
+    public function getDocumentReads(): ActiveQuery
+    {
+        return $this->hasMany(DocumentRead::class, ['document_id' => 'id']);
+    }
+
     public function getAssignments(): ActiveQuery
     {
         return $this->hasMany(DocumentAssignment::class, ['document_id' => 'id']);

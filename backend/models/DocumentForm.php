@@ -145,10 +145,38 @@ class DocumentForm extends Model
         $file->save(false);
     }
 
+    private function getPdfPageCount(string $filePath): int
+    {
+        if (!is_file($filePath)) {
+            return 1;
+        }
+
+        try {
+            $pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
+            return (int) $pdf->setSourceFile($filePath);
+        } catch (\Throwable $e) {
+            $content = @file_get_contents($filePath);
+            if ($content !== false) {
+                if (preg_match('/\/Type\s*\/Pages[^>]*\/Count\s+(\d+)/', $content, $matches)) {
+                    return max(1, (int) $matches[1]);
+                }
+                $pageMatches = preg_match_all('/\/Type\s*\/Page\b/', $content);
+                if ($pageMatches > 0) {
+                    return max(1, (int) $pageMatches);
+                }
+            }
+            return 1;
+        }
+    }
+
     private function createInitialRecords(Document $document): void
     {
         $now = time();
         $userId = Yii::$app->user->id;
+
+        $year = date('Y', strtotime($document->receive_date));
+        $originalPdfPath = Yii::getAlias('@backend/web/uploads/documents/' . $year . '/' . $document->id . '/original.pdf');
+        $pageCount = $this->getPdfPageCount($originalPdfPath);
 
         (new WorkflowAction([
             'document_id' => $document->id,
@@ -159,6 +187,7 @@ class DocumentForm extends Model
             'created_at' => $now,
         ]))->save(false);
 
+        // ตราประทับลงรับหนังสือ ให้ประทับไว้ที่หน้าแรกเสมอ
         (new DocumentStamp([
             'document_id' => $document->id,
             'stamp_type' => DocumentStamp::TYPE_RECEIVE,
@@ -170,10 +199,11 @@ class DocumentForm extends Model
             'created_at' => $now,
         ]))->save(false);
 
+        // ตราประทับแยกกลุ่มงาน ให้อยู่หน้าสุดท้ายเสมอ
         (new DocumentStamp([
             'document_id' => $document->id,
             'stamp_type' => DocumentStamp::TYPE_DEPARTMENT,
-            'page_no' => 1,
+            'page_no' => $pageCount,
             'position_x' => 18,
             'position_y' => 219,
             'content' => 'ตรากลุ่มงานที่เกี่ยวข้อง',

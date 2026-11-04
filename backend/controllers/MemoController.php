@@ -10,6 +10,7 @@ use common\components\MemoPdfService;
 use common\models\Department;
 use common\models\Memo;
 use common\models\MemoAction;
+use common\models\MemoRead;
 use common\models\MemoStampPosition;
 use common\models\SystemSetting;
 use common\models\User;
@@ -146,8 +147,13 @@ class MemoController extends Controller
     public function actionView(int $id): string
     {
         $memo = $this->findModel($id);
-        if (!$this->canView($memo, $this->identity())) {
+        $identity = $this->identity();
+        if (!$this->canView($memo, $identity)) {
             throw new ForbiddenHttpException('คุณไม่มีสิทธิ์ดูบันทึกนี้');
+        }
+
+        if ($identity !== null) {
+            MemoRead::markAsRead($memo->id, (int) $identity->id);
         }
 
         $service = new MemoPdfService();

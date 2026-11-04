@@ -11,8 +11,10 @@ use common\models\AuditLog;
 use common\models\Department;
 use common\models\Document;
 use common\models\DocumentAssignment;
+use common\models\DocumentRead;
 use common\models\DocumentStamp;
 use common\models\Memo;
+use common\models\MemoRead;
 use common\models\SystemSetting;
 use common\models\User;
 use common\models\WorkflowAction;
@@ -143,6 +145,35 @@ class DocumentController extends Controller
             'pagination' => ['pageSize' => 20],
         ]);
 
+        $unreadCountAll = $countAll;
+        $unreadDeptCounts = $deptCounts;
+        $readDocMap = [];
+        if ($identity instanceof User) {
+            $readDocIds = DocumentRead::find()
+                ->select('document_id')
+                ->where(['user_id' => $identity->id])
+                ->column();
+            $readDocMap = array_fill_keys(array_map('intval', $readDocIds), true);
+
+            $unreadBaseQuery = (clone $countQuery)
+                ->leftJoin('{{%document_read}}', '{{%document_read}}.[[document_id]] = {{%document}}.[[id]] AND {{%document_read}}.[[user_id]] = :uid', [':uid' => $identity->id])
+                ->andWhere(['{{%document_read}}.[[id]]' => null]);
+
+            $unreadCountAll = (int) (clone $unreadBaseQuery)->count();
+
+            $unreadDeptCounts = [];
+            $unreadDeptRows = (clone $unreadBaseQuery)
+                ->select(['{{%document}}.[[department_id]]', 'COUNT(*) AS cnt'])
+                ->groupBy('{{%document}}.[[department_id]]')
+                ->asArray()
+                ->all();
+            foreach ($unreadDeptRows as $row) {
+                if ($row['department_id'] !== null) {
+                    $unreadDeptCounts[(int) $row['department_id']] = (int) $row['cnt'];
+                }
+            }
+        }
+
         return $this->render('index', [
             'dataProvider' => $dataProvider,
             'keyword' => $keyword,
@@ -150,7 +181,10 @@ class DocumentController extends Controller
             'departments' => $departments,
             'countAll' => $countAll,
             'deptCounts' => $deptCounts,
+            'unreadCountAll' => $unreadCountAll,
+            'unreadDeptCounts' => $unreadDeptCounts,
             'myAssignedDocIds' => $myAssignedDocIds,
+            'readDocMap' => $readDocMap,
         ]);
     }
 
@@ -240,6 +274,28 @@ class DocumentController extends Controller
             'memo_active' => $myActiveMemosCount,
         ];
 
+        $unreadDocQuery = (clone $docQuery)
+            ->leftJoin('{{%document_read}}', '{{%document_read}}.[[document_id]] = {{%document}}.[[id]] AND {{%document_read}}.[[user_id]] = :uid', [':uid' => $identity->id])
+            ->andWhere(['{{%document_read}}.[[id]]' => null]);
+        $unreadDocCount = (int) $unreadDocQuery->count('DISTINCT {{%document}}.[[id]]');
+
+        $unreadMemoQuery = (clone $memoQuery)
+            ->leftJoin('{{%memo_read}}', '{{%memo_read}}.[[memo_id]] = {{%memo}}.[[id]] AND {{%memo_read}}.[[user_id]] = :uid', [':uid' => $identity->id])
+            ->andWhere(['{{%memo_read}}.[[id]]' => null]);
+        $unreadMemoCount = (int) $unreadMemoQuery->count('DISTINCT {{%memo}}.[[id]]');
+
+        $readDocIds = DocumentRead::find()
+            ->select('document_id')
+            ->where(['user_id' => $identity->id])
+            ->column();
+        $readDocMap = array_fill_keys(array_map('intval', $readDocIds), true);
+
+        $readMemoIds = MemoRead::find()
+            ->select('memo_id')
+            ->where(['user_id' => $identity->id])
+            ->column();
+        $readMemoMap = array_fill_keys(array_map('intval', $readMemoIds), true);
+
         return $this->render('my', [
             'identity' => $identity,
             'docDataProvider' => $docDataProvider,
@@ -248,6 +304,10 @@ class DocumentController extends Controller
             'keyword' => $keyword,
             'memoKeyword' => $memoKeyword,
             'roleLabel' => $identity->roleLabel(),
+            'unreadDocCount' => $unreadDocCount,
+            'unreadMemoCount' => $unreadMemoCount,
+            'readDocMap' => $readDocMap,
+            'readMemoMap' => $readMemoMap,
         ]);
     }
 
@@ -316,6 +376,10 @@ class DocumentController extends Controller
         $model = $this->findModel($id);
 
         $identity = Yii::$app->user->identity;
+        if ($identity instanceof User) {
+            DocumentRead::markAsRead($model->id, (int) $identity->id);
+        }
+
         $staffQuery = User::find()
             ->where(['status' => User::STATUS_ACTIVE, 'role' => User::ROLE_GENERAL_USER])
             ->orderBy(['username' => SORT_ASC]);
@@ -868,18 +932,51 @@ class DocumentController extends Controller
         ];
     }
 
+    private function getDocumentPageCount(Document $model): int
+    {
+        $file = $model->originalFile ?: $model->stampedFile;
+        if ($file === null) {
+            return 1;
+        }
+
+        $sourcePath = Yii::getAlias('@backend/web/' . ltrim($file->storage_path, '/'));
+        if (!is_file($sourcePath)) {
+            return 1;
+        }
+
+        try {
+            $pdf = new \setasign\Fpdi\Tcpdf\Fpdi();
+            return (int) $pdf->setSourceFile($sourcePath);
+        } catch (\Throwable $e) {
+            $content = @file_get_contents($sourcePath);
+            if ($content !== false) {
+                if (preg_match('/\/Type\s*\/Pages[^>]*\/Count\s+(\d+)/', $content, $matches)) {
+                    return max(1, (int) $matches[1]);
+                }
+                $pageMatches = preg_match_all('/\/Type\s*\/Page\b/', $content);
+                if ($pageMatches > 0) {
+                    return max(1, (int) $pageMatches);
+                }
+            }
+            return 1;
+        }
+    }
+
     private function saveStampPosition(Document $model, string $type, float $x, float $y): void
     {
+        $pageNo = ($type === DocumentStamp::TYPE_RECEIVE) ? 1 : $this->getDocumentPageCount($model);
         $stamp = $this->latestStamp($model, $type);
         if ($stamp === null) {
             $stamp = new DocumentStamp([
                 'document_id' => $model->id,
                 'stamp_type' => $type,
-                'page_no' => 1,
+                'page_no' => $pageNo,
                 'content' => $this->defaultStampContent($model, $type),
                 'created_by' => Yii::$app->user->id,
                 'created_at' => time(),
             ]);
+        } else {
+            $stamp->page_no = $pageNo;
         }
 
         $stamp->position_x = $x;
@@ -965,7 +1062,7 @@ class DocumentController extends Controller
 
     private function saveStamp(Document $model, string $type, string $content, int $positionY, int $positionX, bool $useTransaction = true): void
     {
-        $runner = static function () use ($model, $type, $content, $positionY, $positionX): void {
+        $runner = function () use ($model, $type, $content, $positionY, $positionX): void {
             $latest = null;
             foreach ($model->stamps as $stamp) {
                 if ($stamp->stamp_type === $type) {
@@ -973,10 +1070,12 @@ class DocumentController extends Controller
                 }
             }
 
+            $pageNo = ($type === DocumentStamp::TYPE_RECEIVE) ? 1 : $this->getDocumentPageCount($model);
+
             (new DocumentStamp([
                 'document_id' => $model->id,
                 'stamp_type' => $type,
-                'page_no' => 1,
+                'page_no' => $pageNo,
                 'position_x' => $latest?->position_x ?? $positionX,
                 'position_y' => $latest?->position_y ?? $positionY,
                 'content' => $content,
