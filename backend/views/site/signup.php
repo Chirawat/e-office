@@ -27,7 +27,7 @@ $labelOptions = ['class' => 'form-label fw-semibold'];
 $hasLineLinked = !empty($model->line_user_id);
 ?>
 
-<div class="card border-0 overflow-hidden login-split-card eoffice-login-card my-4" style="max-width: 960px; width: 100%;">
+<div class="card border-0 overflow-hidden login-split-card eoffice-login-card my-auto my-md-4" style="max-width: 960px; width: 100%;">
     <div class="row g-0">
 
         <!-- ฝั่งซ้าย: Theme Brand Panel -->
@@ -72,7 +72,7 @@ $hasLineLinked = !empty($model->line_user_id);
 
         <!-- ฝั่งขวา: Signup Form -->
         <div class="col-lg-8 col-md-7 col-12 bg-white">
-            <div class="p-4 p-sm-5">
+            <div class="p-3 p-sm-4 p-md-5">
                 <div class="mb-4">
                     <div class="d-md-none mb-3">
                         <div class="login-mobile-mark">

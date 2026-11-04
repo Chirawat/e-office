@@ -17,9 +17,8 @@ $name = $user !== null ? $user->displayName() : 'คุณครู';
 $dept = $user?->department?->name ?? 'ทั่วไป';
 ?>
 
-<div class="d-flex align-items-center justify-content-center min-vh-100 py-4 px-3" style="background-color: #f1f5f9;">
-    <div class="card border-0 shadow-sm rounded-4 overflow-hidden" style="max-width: 580px; width: 100%;">
-        <div class="p-4 p-sm-5 bg-white text-center">
+<div class="card border-0 shadow-sm rounded-4 overflow-hidden my-auto my-md-4" style="max-width: 580px; width: 100%;">
+    <div class="p-3 p-sm-4 p-md-5 bg-white text-center">
 
             <!-- ไอคอนนาฬิกาทราย / อนุมัติ -->
             <div class="d-inline-flex align-items-center justify-content-center rounded-circle mb-3 shadow-sm" style="width: 80px; height: 80px; background: #fff7ed; color: #ea580c; font-size: 38px; border: 2px solid #fdba74;">
@@ -79,5 +78,4 @@ $dept = $user?->department?->name ?? 'ทั่วไป';
 
         </div>
     </div>
-</div>
 

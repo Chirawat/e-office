@@ -21,7 +21,7 @@ HTML;
 $labelOptions = ['class' => 'form-label fw-semibold'];
 ?>
 
-<div class="card border-0 overflow-hidden login-split-card eoffice-login-card" style="max-width: 920px; width: 100%;">
+<div class="card border-0 overflow-hidden login-split-card eoffice-login-card my-auto my-md-4" style="max-width: 920px; width: 100%;">
     <div class="row g-0">
 
         <!-- ฝั่งซ้าย: Brand & Visual Panel (สำหรับหน้าจอ Desktop) -->
