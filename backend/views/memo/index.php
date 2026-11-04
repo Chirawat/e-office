@@ -34,10 +34,6 @@ $thaiDate = static function (?string $date): string {
             <h1 class="h5 fw-bold text-dark mb-0"><?= Html::encode($this->title) ?></h1>
             <div class="small text-muted">บันทึกข้อความภายในและสถานะการเสนอ</div>
         </div>
-        <div class="d-flex gap-1 flex-wrap">
-            <?= Html::a('<i class="bi bi-list-check me-1" aria-hidden="true"></i><span>งานบันทึกของฉัน</span>', ['my'], ['class' => 'btn btn-sm btn-outline-secondary']) ?>
-            <?= Html::a('<i class="bi bi-plus-circle me-1" aria-hidden="true"></i><span>สร้างบันทึกเสนอ</span>', ['create'], ['class' => 'btn btn-sm btn-primary fw-semibold']) ?>
-        </div>
     </div>
 
     <div class="content-card search-card table-search-card">

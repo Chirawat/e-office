@@ -245,12 +245,6 @@ $memoStatusBadge = static function (Memo $model): string {
                     </button>
                 </li>
             </ul>
-
-            <div class="pb-1 pe-2 d-none d-sm-block">
-                <a href="<?= Url::to(['/memo/create']) ?>" class="btn btn-xs btn-sm btn-outline-success py-1 px-2 small d-inline-flex align-items-center gap-1">
-                    <i class="bi bi-plus-lg"></i><span>ร่างบันทึกใหม่</span>
-                </a>
-            </div>
         </div>
 
         <!-- Tab Content -->

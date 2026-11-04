@@ -210,13 +210,6 @@ $pagination = $dataProvider->getPagination();
             <i class="bi bi-folder2-open text-primary"></i>
             <span>ทะเบียนหนังสือเข้า</span>
         </h1>
-        <?php if ($canCreateDocument): ?>
-            <div>
-                <a href="<?= Url::to(['create']) ?>" class="btn btn-sm btn-primary py-1 px-2 small fw-semibold">
-                    <i class="bi bi-plus-circle me-1"></i> ลงรับหนังสือใหม่
-                </a>
-            </div>
-        <?php endif; ?>
     </div>
 
     <!-- ส่วนค้นหาหนังสือ (Compact Search Bar) -->

@@ -50,10 +50,6 @@ $memoItems = [
         'label' => '<i class="bi bi-journal-text me-2 text-primary" aria-hidden="true"></i><span>รายการบันทึกเสนอทั้งหมด</span>',
         'url' => ['/memo/index'],
     ],
-    [
-        'label' => '<i class="bi bi-person-lines-fill me-2 text-info" aria-hidden="true"></i><span>บันทึกข้อความของฉัน</span>',
-        'url' => ['/memo/my'],
-    ],
     '-',
     [
         'label' => '<i class="bi bi-file-earmark-plus me-2 text-success" aria-hidden="true"></i><span>สร้างบันทึกเสนอใหม่</span>',
