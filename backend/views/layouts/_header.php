@@ -173,6 +173,11 @@ if (Yii::$app->user->isGuest) {
             'options' => ['class' => 'bg-light bg-opacity-75 border-bottom'],
         ],
         [
+            'label' => '<i class="bi bi-person-gear me-2 text-primary" aria-hidden="true"></i><span>ข้อมูลผู้ใช้</span>',
+            'url' => ['/user/profile'],
+        ],
+        '-',
+        [
             'label' => '<i class="bi bi-box-arrow-right me-2 text-danger" aria-hidden="true"></i><span>ออกจากระบบ</span>',
             'url' => ['/site/logout'],
             'linkOptions' => [
@@ -202,7 +207,7 @@ if (Yii::$app->user->isGuest) {
     <?php NavBar::begin(
         [
             'brandLabel' => '<div class="d-inline-flex align-items-center gap-2"><span class="brand-badge-icon shadow-sm"><i class="bi bi-building-check text-primary"></i></span><span class="fw-bold tracking-wide">e-Office</span></div>',
-            'brandUrl' => Yii::$app->user->isGuest ? ['/site/index'] : ['/document/my'],
+            'brandUrl' => Yii::$app->user->isGuest ? ['/site/login'] : ['/document/my'],
             'options' => ['class' => 'navbar navbar-expand-lg navbar-dark fixed-top eoffice-navbar']
         ],
     ) ?>

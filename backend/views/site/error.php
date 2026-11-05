@@ -25,8 +25,8 @@ $statusCode = $exception instanceof HttpException ? $exception->statusCode : 500
         </p>
 
         <?= Html::a(
-            'Go to Homepage',
-            Yii::$app->homeUrl,
+            'กลับสู่หน้าหลัก',
+            Yii::$app->user->isGuest ? ['/site/login'] : ['/document/my'],
             [
                 'class' => 'btn btn-outline-primary btn-lg',
             ],

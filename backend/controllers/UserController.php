@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace backend\controllers;
 
 use backend\models\UserCreateForm;
+use backend\models\UserProfileForm;
 use backend\models\UserUpdateForm;
 use common\components\LineMessagingService;
 use common\models\Department;
@@ -43,6 +44,7 @@ class UserController extends Controller
                     'delete' => ['post'],
                     'toggle-auto-approve' => ['post'],
                     'set-document-approver' => ['post'],
+                    'remove-signature' => ['post'],
                 ],
             ],
         ];
@@ -251,6 +253,57 @@ class UserController extends Controller
         }
 
         return $this->redirect(Yii::$app->request->referrer ?: ['index']);
+    }
+
+    /**
+     * หน้าดูและแก้ไขข้อมูลส่วนตัวตอนสมัครสมาชิก พร้อมอัปโหลด/แก้ไขลายเซ็นสแกน
+     */
+    public function actionProfile(): string|Response
+    {
+        /** @var User|null $user */
+        $user = Yii::$app->user->identity;
+        if (!$user instanceof User) {
+            return $this->redirect(['/site/login']);
+        }
+
+        $model = new UserProfileForm($user);
+        if ($model->load(Yii::$app->request->post()) && $model->save()) {
+            Yii::$app->session->setFlash('success', 'บันทึกข้อมูลส่วนตัวและภาพลายเซ็นเรียบร้อยแล้ว');
+            return $this->refresh();
+        }
+
+        $departments = Department::find()
+            ->where(['is_active' => true])
+            ->orderBy(['sort_order' => SORT_ASC, 'id' => SORT_ASC])
+            ->all();
+
+        return $this->render('profile', [
+            'model' => $model,
+            'user' => $user,
+            'departments' => $departments,
+        ]);
+    }
+
+    /**
+     * ลบภาพลายเซ็นสแกนของตนเอง
+     */
+    public function actionRemoveSignature(): Response
+    {
+        /** @var User|null $user */
+        $user = Yii::$app->user->identity;
+        if ($user instanceof User) {
+            if ($user->signature_path) {
+                $fullPath = Yii::getAlias('@backend/web/' . ltrim($user->signature_path, '/'));
+                if (file_exists($fullPath)) {
+                    @unlink($fullPath);
+                }
+            }
+            $user->signature_path = null;
+            $user->save(false, ['signature_path', 'updated_at']);
+            Yii::$app->session->setFlash('success', 'ลบภาพลายเซ็นสแกนเรียบร้อยแล้ว');
+        }
+
+        return $this->redirect(['profile']);
     }
 
     private function findModel(int $id): User

@@ -68,21 +68,30 @@ class SiteController extends Controller
     }
 
     /**
-     * Displays homepage: Landing Page สำหรับ Guest, Internal Dashboard สำหรับผู้ใช้ที่ล็อกอินแล้ว
-     *
-     * @return string
+     * Displays homepage: ถ้ายังไม่ล็อกอินให้ไปหน้า Login ถ้าล็อกอินแล้วให้ไปหน้ารายการของฉัน (/document/my)
      */
-    public function actionIndex(): string
+    public function actionIndex(): Response
     {
-        // 1. ถ้ายังไม่ได้ล็อกอิน ให้แสดงหน้า Landing Page (แนะนำระบบ / ประชาสัมพันธ์)
         if (Yii::$app->user->isGuest) {
-            return $this->render('index');
+            return $this->redirect(['login']);
+        }
+
+        return $this->redirect(['/document/my']);
+    }
+
+    /**
+     * Dashboard สถิติภาพรวมภายในระบบ
+     */
+    public function actionDashboard(): string|Response
+    {
+        if (Yii::$app->user->isGuest) {
+            return $this->redirect(['login']);
         }
 
         /** @var User $identity */
         $identity = Yii::$app->user->identity;
 
-        // 2. ดึงสถิติต่างๆ สำหรับ Internal Dashboard
+        // ดึงสถิติต่างๆ สำหรับ Internal Dashboard
         $stats = [
             'pending_users' => 0,
             'total_users' => 0,
