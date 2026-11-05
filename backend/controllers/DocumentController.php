@@ -52,6 +52,7 @@ class DocumentController extends Controller
                     'complete' => ['post'],
                     'generate-stamped-pdf' => ['post'],
                     'update-stamp-positions' => ['post'],
+                    'update-summary' => ['post'],
                 ],
             ],
         ];
@@ -530,6 +531,27 @@ class DocumentController extends Controller
         return $this->redirect(['view', 'id' => $model->id]);
     }
 
+    public function actionUpdateSummary(int $id): Response
+    {
+        $model = $this->findModel($id);
+        if (!$this->canCurrentUserEditSummary($model)) {
+            throw new ForbiddenHttpException('คุณไม่มีสิทธิ์แก้ไขสรุปเนื้อหาของหนังสือนี้');
+        }
+
+        $summary = trim((string) Yii::$app->request->post('summary', ''));
+        $model->summary = $summary !== '' ? $summary : trim((string) $model->subject);
+
+        if ($model->save(false)) {
+            $this->saveAudit($model, 'document.summary_updated', 'แก้ไขสรุปเนื้อหาในหนังสือโดยย่อ', false);
+            $this->regenerateStampedPdf($model);
+            Yii::$app->session->setFlash('success', 'บันทึกสรุปเนื้อหาในหนังสือเรียบร้อยแล้ว');
+        } else {
+            Yii::$app->session->setFlash('error', 'ไม่สามารถบันทึกสรุปเนื้อหาได้');
+        }
+
+        return $this->redirect(['view', 'id' => $model->id]);
+    }
+
     public function actionComplete(int $id): Response
     {
         $this->requireRole([User::ROLE_DEPUTY_DIRECTOR, User::ROLE_STAFF, User::ROLE_GENERAL_USER], 'เฉพาะรอง ผอ. หรือผู้รับมอบหมายเท่านั้นที่ปิดเรื่องได้');
@@ -897,6 +919,28 @@ class DocumentController extends Controller
         }
 
         return false;
+    }
+
+    public function canCurrentUserEditSummary(Document $model): bool
+    {
+        $identity = Yii::$app->user->identity;
+        if (!$identity instanceof User) {
+            return false;
+        }
+
+        if ($identity->hasRole([User::ROLE_ADMIN, User::ROLE_OFFICER, User::ROLE_DIRECTOR])) {
+            return true;
+        }
+
+        if ($identity->role === User::ROLE_DEPUTY_DIRECTOR) {
+            return $identity->canGiveDeputyComment($model->department_id);
+        }
+
+        if ($identity->role === User::ROLE_STAFF) {
+            return $identity->belongsToDepartment($model->department_id);
+        }
+
+        return $this->canCurrentUserCompleteAssignment($model);
     }
 
     private function regenerateStampedPdf(Document $model, bool $flashWarning = true): void

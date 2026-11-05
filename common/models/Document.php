@@ -18,6 +18,7 @@ use yii\db\ActiveRecord;
  * @property string|null $external_date
  * @property string $sender
  * @property string $subject
+ * @property string|null $summary
  * @property string $urgency
  * @property string $confidentiality
  * @property int|null $department_id
@@ -62,7 +63,7 @@ class Document extends ActiveRecord
             [['receive_no', 'receive_date', 'sender', 'subject', 'department_id'], 'required'],
             [['receive_date', 'receive_time', 'external_date', 'due_date'], 'safe'],
             [['department_id'], 'integer'],
-            [['note'], 'string'],
+            [['note', 'summary'], 'string'],
             [['receive_no'], 'string', 'max' => 50],
             [['external_no'], 'string', 'max' => 120],
             [['sender'], 'string', 'max' => 255],
@@ -71,6 +72,20 @@ class Document extends ActiveRecord
             [['receive_no'], 'unique'],
             [['department_id'], 'exist', 'targetClass' => Department::class, 'targetAttribute' => ['department_id' => 'id']],
         ];
+    }
+
+    public function beforeSave($insert): bool
+    {
+        if (!parent::beforeSave($insert)) {
+            return false;
+        }
+
+        // หากสรุปเนื้อหาเป็นค่าว่าง ให้ใช้ชื่อเรื่องหนังสือเป็นข้อมูลตั้งต้น
+        if ($this->summary === null || trim($this->summary) === '') {
+            $this->summary = $this->subject;
+        }
+
+        return true;
     }
 
     public function attributeLabels(): array
@@ -83,6 +98,7 @@ class Document extends ActiveRecord
             'external_date' => 'ลงวันที่',
             'sender' => 'จาก',
             'subject' => 'เรื่อง',
+            'summary' => 'สรุปเนื้อหาในหนังสือโดยย่อ',
             'urgency' => 'ความเร่งด่วน',
             'confidentiality' => 'ชั้นความลับ',
             'department_id' => 'กลุ่มงานที่เกี่ยวข้อง',

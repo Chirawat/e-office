@@ -166,6 +166,12 @@ $canCompleteAssignment = $identity instanceof User
             && (int) $identity->department_id === (int) $latestAssignment->department_id
         )
     );
+$canEditSummary = $identity instanceof User && (
+    $identity->hasRole([User::ROLE_ADMIN, User::ROLE_OFFICER, User::ROLE_DIRECTOR])
+    || ($identity->role === User::ROLE_DEPUTY_DIRECTOR && $identity->canGiveDeputyComment($model->department_id))
+    || ($identity->role === User::ROLE_STAFF && $identity->belongsToDepartment($model->department_id))
+    || $canCompleteAssignment
+);
 $staffItems = ArrayHelper::map($staffUsers, 'id', static fn (User $user): string => $user->displayName());
 $showStampPositionTools = true;
 $canAdjustStampPositions = $showStampPositionTools && $model->status === Document::STATUS_REGISTERED && $canRegisterDocument;
@@ -186,7 +192,7 @@ foreach ($model->stamps as $stamp) {
 }
 $stampPositionDefaults = [
     DocumentStamp::TYPE_RECEIVE => ['x' => 144, 'y' => 14, 'w' => 58, 'h' => 27, 'label' => 'ตรารับหนังสือ'],
-    DocumentStamp::TYPE_DEPARTMENT => ['x' => 18, 'y' => 219, 'w' => 58, 'h' => 58, 'label' => 'ตรากลุ่มงาน'],
+    DocumentStamp::TYPE_DEPARTMENT => ['x' => 18, 'y' => 210, 'w' => 60, 'h' => 60, 'label' => 'ตรากลุ่มงาน'],
     DocumentStamp::TYPE_DEPUTY_COMMENT => ['x' => 128, 'y' => 170, 'w' => 68, 'h' => 42, 'label' => 'ความเห็นรอง ผอ.'],
     DocumentStamp::TYPE_DIRECTOR_ORDER => ['x' => 132, 'y' => 230, 'w' => 64, 'h' => 38, 'label' => 'คำสั่ง ผอ.'],
 ];
@@ -359,6 +365,17 @@ if ($previewPdfUrl) {
                     <div><dt>สถานะ</dt><dd><span class="status-badge <?= Html::encode($statusClass) ?>"><?= Html::encode($status) ?></span></dd></div>
                     <div><dt>เลขหนังสือต้นทาง</dt><dd><?= Html::encode($model->external_no ?: '-') ?></dd></div>
                     <div><dt>จาก</dt><dd><?= Html::encode($model->sender) ?></dd></div>
+                    <div class="meta-item-stacked">
+                        <dt class="d-flex justify-content-between align-items-center">
+                            <span>สรุปเนื้อหาในหนังสือโดยย่อ</span>
+                            <?php if ($canEditSummary): ?>
+                                <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#modal-edit-summary" title="แก้ไขสรุปเนื้อหา">
+                                    <i class="bi bi-pencil me-1"></i>แก้ไข
+                                </button>
+                            <?php endif; ?>
+                        </dt>
+                        <dd class="p-2 bg-light rounded border text-dark small mt-1" style="word-break: break-word; line-height: 1.5; white-space: pre-line; text-indent: 0;"><?= Html::encode(trim((string) ($model->summary ?: $model->subject))) ?></dd>
+                    </div>
                     <div><dt>ความเร่งด่วน</dt><dd><?= Html::encode($urgency) ?></dd></div>
                     <div><dt>กลุ่มงาน</dt><dd><?= Html::encode($model->department->name ?? '-') ?></dd></div>
                     <div><dt>ผู้ปฏิบัติ</dt><dd><?= Html::encode($latestAssignment?->assignedTo?->displayName() ?? '-') ?></dd></div>
@@ -554,7 +571,64 @@ if ($previewPdfUrl) {
     </div>
 </div>
 
+<?php if ($canEditSummary): ?>
+    <div class="modal fade" id="modal-edit-summary" tabindex="-1" aria-labelledby="modalEditSummaryLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow border-0">
+                <?= Html::beginForm(['update-summary', 'id' => $model->id], 'post') ?>
+                <?= $csrf ?>
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fs-6 fw-bold text-dark" id="modalEditSummaryLabel">
+                        <i class="bi bi-card-text me-1 text-primary"></i>แก้ไขสรุปเนื้อหาในหนังสือโดยย่อ
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-semibold">ชื่อเรื่องหนังสือ (ค่าตั้งต้น):</label>
+                        <div class="p-2 bg-light border rounded small text-secondary" style="line-height: 1.5; white-space: pre-line; text-indent: 0;"><?= Html::encode(trim((string) $model->subject)) ?></div>
+                    </div>
+                    <div class="mb-2">
+                        <label for="document-summary-input" class="form-label fw-semibold">สรุปเนื้อหาในหนังสือโดยย่อ:</label>
+                        <?= Html::textarea('summary', trim((string) ($model->summary ?: $model->subject)), [
+                            'id' => 'document-summary-input',
+                            'class' => 'form-control',
+                            'rows' => 4,
+                            'style' => 'text-indent: 0;',
+                            'placeholder' => 'ระบุสรุปเนื้อหาในหนังสือโดยย่อ...',
+                        ]) ?>
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <button type="button" class="btn btn-link btn-sm text-secondary text-decoration-none p-0" id="btn-reset-summary-to-subject">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i>คืนค่าตามชื่อเรื่อง
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">ยกเลิก</button>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check2 me-1"></i>บันทึก</button>
+                </div>
+                <?= Html::endForm() ?>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+
 <?php
+if ($canEditSummary) {
+    $subjectJson = json_encode($model->subject, JSON_UNESCAPED_UNICODE);
+    $this->registerJs(<<<JS
+    const btnResetSummary = document.getElementById('btn-reset-summary-to-subject');
+    const summaryInput = document.getElementById('document-summary-input');
+    if (btnResetSummary && summaryInput) {
+        btnResetSummary.addEventListener('click', () => {
+            summaryInput.value = {$subjectJson};
+            summaryInput.focus();
+        });
+    }
+JS);
+}
+
 $this->registerJs(<<<'JS'
 (function () {
     const canvasContainer = document.getElementById('pdf-page-container');

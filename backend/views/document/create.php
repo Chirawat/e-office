@@ -99,6 +99,11 @@ $thaiTime = static function (?string $time): string {
 
             <?= $activeForm->field($form->document, 'sender')->textInput(['maxlength' => true]) ?>
             <?= $activeForm->field($form->document, 'subject')->textarea(['rows' => 3]) ?>
+            <?= $activeForm->field($form->document, 'summary')->textarea([
+                'rows' => 3,
+                'style' => 'text-indent: 0;',
+                'placeholder' => 'หากเว้นว่างไว้ ระบบจะยกเอาชื่อเรื่องหนังสือมาเป็นข้อมูลตั้งต้นให้อัตโนมัติ',
+            ])->hint('สรุปเนื้อหาในหนังสือโดยย่อ (หากเว้นว่างไว้ ระบบจะยกชื่อเรื่องมาเป็นข้อมูลสรุปตั้งต้น และสามารถแก้ไขได้ในภายหลัง)') ?>
 
             <div class="row">
                 <div class="col-md-4">

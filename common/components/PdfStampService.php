@@ -201,34 +201,97 @@ class PdfStampService extends Component
 
     private function drawDepartmentStamp(Fpdi $pdf, Document $document, float $x, float $y): void
     {
-        $w = 58;
-        $line = 6;
-        $checkedCode = $document->department?->code;
-        $departments = [
-            'academic' => 'วิชาการ',
-            'personnel' => 'บุคคล',
-            'budget' => 'งบประมาณ',
-            'general' => 'บริหารทั่วไป',
-            'student_affairs' => 'กิจการนักเรียน',
-        ];
+        $w = 60;
+        $padding = 2.0;
+        $innerW = $w - ($padding * 2);
+        $currX = $x + $padding;
+        $startY = $y;
+        $currY = $y + 2.0;
 
         $pdf->SetDrawColor(37, 60, 155);
         $pdf->SetTextColor(37, 60, 155);
         $pdf->SetLineWidth(0.25);
-        $pdf->Rect($x, $y, $w, 58);
-        $pdf->SetFont('freeserif', 'B', 10.5);
-        $pdf->SetXY($x + 2, $y + 2);
-        $pdf->Cell($w - 4, $line, 'เรียน ผู้อำนวยการ', 0, 2, 'L');
-        $pdf->SetFont('freeserif', '', 9.5);
-        $pdf->Cell($w - 4, $line, 'เห็นสมควร', 0, 2, 'L');
 
-        foreach ($departments as $code => $name) {
-            $prefix = $checkedCode === $code ? '[x] ' : '[ ] ';
-            $pdf->Cell($w - 4, 5.4, $prefix . $name, 0, 2, 'L');
+        // 1. หัวข้อ: เรียน ผู้อำนวยการโรงเรียน
+        $pdf->SetFont('freeserif', 'B', 10);
+        $pdf->SetXY($currX, $currY);
+        $pdf->Cell($innerW, 4.5, 'เรียน ผู้อำนวยการโรงเรียน', 0, 2, 'L');
+        $currY = $pdf->GetY() + 0.5;
+
+        // 2. สรุปหนังสือ
+        $summary = trim((string) ($document->summary ?: $document->subject));
+        if ($summary !== '') {
+            $pdf->SetFont('freeserif', '', 8.5);
+            $pdf->SetXY($currX, $currY);
+            $pdf->MultiCell($innerW, 3.8, $summary, 0, 'L', false, 1, $currX, $currY);
+            $currY = $pdf->GetY() + 1.0;
         }
 
-        $pdf->SetFont('freeserif', 'I', 9.5);
-        $pdf->Cell($w - 4, $line, 'งานธุรการ', 0, 2, 'L');
+        // 3. เห็นสมควรมอบ
+        $pdf->SetFont('freeserif', 'B', 9);
+        $pdf->SetXY($currX, $currY);
+        $pdf->Cell($innerW, 4.2, 'เห็นสมควรมอบ', 0, 2, 'L');
+        $currY = $pdf->GetY() + 0.5;
+
+        // 4. รายการกลุ่มงาน
+        $checkedCode = $document->department?->code;
+        $departments = [
+            'academic' => 'กลุ่มบริหารวิชาการ',
+            'personnel' => 'กลุ่มบริหารบุคคล',
+            'budget' => 'กลุ่มบริหารงบประมาณ',
+            'general' => 'กลุ่มบริหารทั่วไป',
+            'student_affairs' => 'กลุ่มบริหารกิจการนักเรียน',
+        ];
+
+        $pdf->SetFont('freeserif', '', 8.5);
+        foreach ($departments as $code => $name) {
+            $prefix = ($checkedCode === $code) ? '[ / ] ' : '[   ] ';
+            $pdf->SetXY($currX, $currY);
+            $pdf->Cell($innerW, 3.8, $prefix . $name, 0, 2, 'L');
+            $currY = $pdf->GetY();
+        }
+
+        $currY += 1.0;
+
+        // 5. ผู้ลงนาม (เจ้าหน้าที่ธุรการ)
+        $deptStamp = $this->latestStamp($document, DocumentStamp::TYPE_DEPARTMENT);
+        $officerId = $deptStamp?->created_by ?: $document->created_by;
+        $officer = $officerId ? User::findOne((int) $officerId) : null;
+        $signaturePath = $this->signaturePathForUser($officer);
+
+        if ($signaturePath !== null) {
+            $sigW = 28;
+            $sigH = 11;
+            $sigX = $x + (($w - $sigW) / 2);
+            $sigY = $currY + 0.5;
+            [$imageX, $imageY, $imageWidth, $imageHeight] = $this->containedImageBox($signaturePath, $sigX, $sigY, $sigW, $sigH);
+            $pdf->Image($signaturePath, $imageX, $imageY, $imageWidth, $imageHeight, '', '', '', false, 300);
+            $currY = $sigY + $sigH + 0.5;
+        } else {
+            $currY += 1.5;
+            $pdf->SetFont('freeserif', '', 8.5);
+            $pdf->SetXY($currX, $currY);
+            $pdf->Cell($innerW, 3.8, '....................................................', 0, 2, 'C');
+            $currY = $pdf->GetY() + 0.5;
+        }
+
+        // ชื่อ-สกุล เจ้าหน้าที่ธุรการ
+        $rawName = $officer ? $officer->displayName() : '';
+        $nameText = $rawName !== '' ? '(' . trim($rawName, "() \t\n\r\0\x0B") . ')' : '( .................................................... )';
+        $pdf->SetFont('freeserif', 'B', 8.5);
+        $pdf->SetXY($currX, $currY);
+        $pdf->Cell($innerW, 3.8, $nameText, 0, 2, 'C');
+        $currY = $pdf->GetY();
+
+        // ตำแหน่ง
+        $pdf->SetFont('freeserif', '', 8);
+        $pdf->SetXY($currX, $currY);
+        $pdf->Cell($innerW, 3.6, 'เจ้าหน้าที่ธุรการ', 0, 2, 'C');
+        $currY = $pdf->GetY() + 1.5;
+
+        // วาดกรอบสี่เหลี่ยมรอบตราประทับทั้งหมด
+        $totalH = $currY - $startY;
+        $pdf->Rect($x, $startY, $w, $totalH);
     }
 
     private function drawBlueNote(Fpdi $pdf, string $title, string $content, float $x, float $y, float $w, ?DocumentStamp $stamp = null, array $layout = [], string $context = 'deputy'): void
@@ -424,17 +487,42 @@ class PdfStampService extends Component
         }
 
         $user = User::findOne((int) $stamp->created_by);
-        if ($user === null || !$user->signature_path) {
+        return $this->signaturePathForUser($user);
+    }
+
+    private function signaturePathForUser(?User $user): ?string
+    {
+        if ($user === null) {
             return null;
         }
 
-        $path = Yii::getAlias('@backend/web/' . ltrim($user->signature_path, '/'));
-
-        if (!is_file($path)) {
-            return null;
+        if ($user->signature_path) {
+            $path = Yii::getAlias('@backend/web/' . ltrim($user->signature_path, '/'));
+            if (is_file($path)) {
+                return $this->pdfSafeSignaturePath($path);
+            }
         }
 
-        return $this->pdfSafeSignaturePath($path);
+        // ค้นหาลายเซ็นจากประวัติบัญชีเดิมของผู้ใช้คนเดียวกัน (กรณีเปลี่ยนบัญชี/ผูกไลน์ใหม่)
+        $cleanUsername = preg_replace('/__deleted_\d+$/', '', (string) $user->username);
+        $previousUser = User::find()
+            ->where(['not', ['signature_path' => null]])
+            ->andWhere(['or',
+                ['like', 'username', $cleanUsername . '%', false],
+                ['phone' => $user->phone],
+                ['fullname' => $user->fullname],
+            ])
+            ->orderBy(['id' => SORT_DESC])
+            ->one();
+
+        if ($previousUser && $previousUser->signature_path) {
+            $prevPath = Yii::getAlias('@backend/web/' . ltrim($previousUser->signature_path, '/'));
+            if (is_file($prevPath)) {
+                return $this->pdfSafeSignaturePath($prevPath);
+            }
+        }
+
+        return null;
     }
 
     private function pdfSafeSignaturePath(string $sourcePath): string
