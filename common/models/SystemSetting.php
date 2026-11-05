@@ -30,6 +30,7 @@ class SystemSetting extends ActiveRecord
     public const KEY_DOC_RECEIVE_START_NO = 'doc_receive_start_no';
     public const KEY_DOC_RECEIVE_YEAR = 'doc_receive_year';
     public const KEY_AUTO_APPROVE_SIGNUP = 'auto_approve_signup';
+    public const KEY_DOCUMENT_APPROVER_ID = 'document_approver_id';
 
     /** @var array<string, mixed>|null Local memory cache for request */
     private static ?array $cache = null;
@@ -194,6 +195,32 @@ class SystemSetting extends ActiveRecord
     public static function isAutoApproveSignup(): bool
     {
         return (string) static::get(self::KEY_AUTO_APPROVE_SIGNUP, '0') === '1';
+    }
+
+    /**
+     * ดึง ID ของผู้ตรวจสอบ/อนุมัติหนังสือรับที่ Admin กำหนดไว้
+     */
+    public static function getDocumentApproverId(): ?int
+    {
+        $val = static::get(self::KEY_DOCUMENT_APPROVER_ID);
+        if ($val === null || $val === '' || (int) $val <= 0) {
+            return null;
+        }
+
+        return (int) $val;
+    }
+
+    /**
+     * ดึงโมเดล User ของผู้ตรวจสอบ/อนุมัติหนังสือรับที่ Admin กำหนดไว้
+     */
+    public static function getDocumentApprover(): ?User
+    {
+        $id = static::getDocumentApproverId();
+        if ($id === null) {
+            return null;
+        }
+
+        return User::findOne(['id' => $id, 'status' => User::STATUS_ACTIVE]);
     }
 
     /**

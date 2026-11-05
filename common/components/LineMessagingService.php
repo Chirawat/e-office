@@ -50,6 +50,32 @@ class LineMessagingService
     }
 
     /**
+     * แจ้งเตือนกระบวนการหนังสือรับ (เสนอผู้ตรวจสอบ/อนุมัติ, เสนอรอง ผอ., ส่งกลับแก้ไข)
+     */
+    public function notifyDocumentWorkflow(User $recipient, Document $document, User $actor, string $title, string $message = ''): bool
+    {
+        if ($recipient->line_user_id === null || $recipient->line_user_id === '') {
+            return false;
+        }
+
+        $lines = [
+            $title,
+            '',
+            'เลขรับ: ' . $document->receive_no,
+            'เรื่อง: ' . $document->subject,
+            'จาก: ' . $document->sender,
+            'ดำเนินการโดย: ' . $actor->displayName(),
+        ];
+        if ($message !== '') {
+            $lines[] = 'ข้อความ: ' . $message;
+        }
+        $lines[] = '';
+        $lines[] = 'เปิดดูเอกสาร: ' . Url::to(['/document/view', 'id' => $document->id], true);
+
+        return $this->pushText($recipient->line_user_id, implode("\n", $lines));
+    }
+
+    /**
      * แจ้งเตือนเกี่ยวกับบันทึกข้อความ e-Memo (Flex Message พร้อมปุ่มเปิดดู)
      */
     public function notifyMemo(User $recipient, Memo $memo, User $actor, string $message): bool

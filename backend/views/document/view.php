@@ -172,9 +172,12 @@ $canEditSummary = $identity instanceof User && (
     || ($identity->role === User::ROLE_STAFF && $identity->belongsToDepartment($model->department_id))
     || $canCompleteAssignment
 );
+$canApproveDocument = $identity instanceof User && ($identity->hasRole(User::ROLE_ADMIN) || ((int) $identity->id === (int) $model->approver_id));
+$canSubmitToApprover = $identity instanceof User && ($identity->hasRole([User::ROLE_ADMIN, User::ROLE_OFFICER]));
+$allUserItems = ArrayHelper::map($allUsers ?? [], 'id', static fn (User $user): string => $user->displayName() . ' (' . $user->roleLabel() . ')');
 $staffItems = ArrayHelper::map($staffUsers, 'id', static fn (User $user): string => $user->displayName());
 $showStampPositionTools = true;
-$canAdjustStampPositions = $showStampPositionTools && $model->status === Document::STATUS_REGISTERED && $canRegisterDocument;
+$canAdjustStampPositions = $showStampPositionTools && in_array($model->status, [Document::STATUS_REGISTERED, Document::STATUS_RETURNED], true) && $canRegisterDocument;
 $useBrowserPdfPreview = $previewImageUrl === null && $previewPdfUrl !== null && $canAdjustStampPositions;
 $departmentItems = ArrayHelper::map($departments, 'id', 'name');
 $attachmentFiles = array_values(array_filter($model->files, static fn (DocumentFile $file): bool => $file->file_type === DocumentFile::TYPE_ATTACHMENT));
@@ -378,6 +381,7 @@ if ($previewPdfUrl) {
                     </div>
                     <div><dt>ความเร่งด่วน</dt><dd><?= Html::encode($urgency) ?></dd></div>
                     <div><dt>กลุ่มงาน</dt><dd><?= Html::encode($model->department->name ?? '-') ?></dd></div>
+                    <div><dt>ผู้ตรวจ/อนุมัติ</dt><dd><?= Html::encode($model->approver?->displayName() ?? \common\models\SystemSetting::getDocumentApprover()?->displayName() ?? '-') ?></dd></div>
                     <div><dt>ผู้ปฏิบัติ</dt><dd><?= Html::encode($latestAssignment?->assignedTo?->displayName() ?? '-') ?></dd></div>
                     <div><dt>ครบกำหนด</dt><dd><?= $model->due_date ? Yii::$app->formatter->asDate($model->due_date) : '-' ?></dd></div>
                 </dl>
@@ -423,12 +427,115 @@ if ($previewPdfUrl) {
             <section class="content-card">
                 <h2>ดำเนินการ</h2>
 
-                <?php if ($model->status === Document::STATUS_REGISTERED && $canSubmitToDeputy): ?>
-                    <?= Html::beginForm(['submit-to-deputy', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
+                <?php if ($model->status === Document::STATUS_REGISTERED && $canSubmitToApprover): ?>
+                    <?php $systemApprover = \common\models\SystemSetting::getDocumentApprover(); ?>
+                    <?= Html::beginForm(['submit-to-approver', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
                         <?= $csrf ?>
-                        <p>เสนอหนังสือให้รอง ผอ. กลุ่มงานที่เกี่ยวข้องตรวจทานและลงความเห็น</p>
-                        <?= Html::submitButton('<i class="bi bi-send" aria-hidden="true"></i><span>เสนอรอง ผอ.</span>', ['class' => 'btn btn-primary w-100']) ?>
+                        <p class="small text-muted mb-2">เสนอหนังสือให้ผู้ตรวจพิจารณาอนุมัติความถูกต้องก่อนเสนอต่อรอง ผอ.</p>
+                        <?php if ($systemApprover !== null): ?>
+                            <div class="alert alert-light border py-2 px-3 small mb-3">
+                                <div class="text-muted small">ผู้ตรวจสอบ/อนุมัติ (กำหนดโดย Admin):</div>
+                                <div class="fw-bold text-dark fs-6 mt-1">
+                                    <i class="bi bi-shield-check text-primary me-1"></i><?= Html::encode($systemApprover->displayName()) ?>
+                                    <span class="badge bg-secondary ms-1"><?= Html::encode($systemApprover->roleLabel()) ?></span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted" for="approver-comment">หมายเหตุถึงผู้ตรวจสอบ (ถ้ามี)</label>
+                                <?= Html::textarea('comment', '', [
+                                    'id' => 'approver-comment',
+                                    'class' => 'form-control',
+                                    'rows' => 2,
+                                    'placeholder' => 'ระบุข้อความหรือหมายเหตุ...',
+                                ]) ?>
+                            </div>
+                            <?= Html::submitButton('<i class="bi bi-send-check me-1" aria-hidden="true"></i><span>เสนอผู้ตรวจสอบ/อนุมัติ</span>', ['class' => 'btn btn-primary w-100']) ?>
+                        <?php else: ?>
+                            <div class="alert alert-warning py-2 px-3 small mb-0">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                <strong>ยังไม่ได้กำหนดผู้ตรวจสอบในระบบ</strong><br>
+                                กรุณาแจ้งผู้ดูแลระบบ (Admin) เพื่อตั้งค่าผู้ตรวจสอบ/อนุมัติในหน้า "ผู้ใช้และบทบาท"
+                            </div>
+                        <?php endif; ?>
                     <?= Html::endForm() ?>
+
+                <?php elseif ($model->status === Document::STATUS_SUBMITTED_TO_APPROVER): ?>
+                    <?php if ($canApproveDocument): ?>
+                        <div class="alert alert-info py-2 px-3 small mb-3">
+                            <i class="bi bi-shield-check me-1"></i>ท่านได้รับมอบหมายให้ตรวจสอบและอนุมัติหนังสือฉบับนี้
+                        </div>
+
+                        <!-- ตรวจสอบ/แก้ไขกลุ่มงานที่มอบหมาย (ติ๊กใหม่ได้หากระบุผิด) -->
+                        <div class="mb-3">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <label class="form-label fw-semibold mb-0">เห็นสมควรมอบกลุ่มงาน (ตรากลุ่มงาน)</label>
+                                <span class="badge bg-secondary-subtle text-secondary border fw-normal" style="font-size: 0.75rem;">ติ๊กใหม่ได้หากธุรการระบุผิด</span>
+                            </div>
+                            <div class="border rounded p-2 bg-light">
+                                <?php foreach ($departments as $dept): ?>
+                                    <div class="form-check my-1">
+                                        <input class="form-check-input review-dept-radio" type="radio" name="review_department_id" id="dept-radio-<?= $dept->id ?>" value="<?= $dept->id ?>" <?= ((int)$model->department_id === (int)$dept->id) ? 'checked' : '' ?> onchange="
+                                            document.querySelectorAll('input[name=\'review_department_id\']').forEach(function(r) {
+                                                const lbl = document.querySelector('label[for=\'' + r.id + '\']');
+                                                if (lbl) {
+                                                    if (r.checked) {
+                                                        lbl.classList.add('fw-bold', 'text-primary');
+                                                        lbl.classList.remove('text-dark');
+                                                    } else {
+                                                        lbl.classList.remove('fw-bold', 'text-primary');
+                                                        lbl.classList.add('text-dark');
+                                                    }
+                                                }
+                                            });
+                                        ">
+                                        <label class="form-check-label small <?= ((int)$model->department_id === (int)$dept->id) ? 'fw-bold text-primary' : 'text-dark' ?>" for="dept-radio-<?= $dept->id ?>">
+                                            <?= Html::encode($dept->name) ?>
+                                        </label>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="form-text small text-muted">หากพบว่าธุรการติ๊กกลุ่มงานผิด สามารถติ๊กเลือกกลุ่มงานใหม่ที่นี่แล้วกดอนุมัติได้ทันที ตราประทับจะปรับเป็นกลุ่มงานใหม่โดยอัตโนมัติ</div>
+                        </div>
+
+                        <label class="form-label fw-semibold" for="review-comment">ความเห็นการตรวจสอบ/อนุมัติ (ถ้ามี)</label>
+                        <?= Html::textarea('comment', '', [
+                            'id' => 'review-comment',
+                            'class' => 'form-control mb-3',
+                            'rows' => 2,
+                            'placeholder' => 'ระบุความเห็นหรือข้อเสนอแนะ (ถ้ามี)...',
+                        ]) ?>
+                        <div class="d-grid gap-2">
+                            <?= Html::beginForm(['approver-approve', 'id' => $model->id], 'post', ['class' => 'mb-0', 'id' => 'form-approver-approve']) ?>
+                                <?= $csrf ?>
+                                <?= Html::hiddenInput('comment', '', ['id' => 'hidden-approve-comment']) ?>
+                                <?= Html::hiddenInput('department_id', (string) $model->department_id, ['id' => 'hidden-approve-department-id']) ?>
+                                <?= Html::submitButton('<i class="bi bi-check-circle me-1"></i><span>อนุมัติและเสนอรอง ผอ.</span>', [
+                                    'class' => 'btn btn-success w-100',
+                                    'onclick' => "
+                                        document.getElementById('hidden-approve-comment').value = document.getElementById('review-comment').value;
+                                        const checkedDept = document.querySelector('input[name=\"review_department_id\"]:checked');
+                                        if (checkedDept) {
+                                            document.getElementById('hidden-approve-department-id').value = checkedDept.value;
+                                        }
+                                    ",
+                                ]) ?>
+                            <?= Html::endForm() ?>
+
+                            <?= Html::beginForm(['approver-return', 'id' => $model->id], 'post', ['class' => 'mb-0', 'id' => 'form-approver-return']) ?>
+                                <?= $csrf ?>
+                                <?= Html::hiddenInput('comment', '', ['id' => 'hidden-return-comment']) ?>
+                                <?= Html::submitButton('<i class="bi bi-arrow-return-left me-1"></i><span>ส่งกลับให้ธุรการแก้ไข</span>', [
+                                    'class' => 'btn btn-outline-danger w-100',
+                                    'onclick' => "document.getElementById('hidden-return-comment').value = document.getElementById('review-comment').value;",
+                                ]) ?>
+                            <?= Html::endForm() ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="alert alert-warning py-3 px-3 mb-0 small">
+                            <i class="bi bi-hourglass-split me-1"></i><strong>รอการตรวจสอบ/อนุมัติ</strong><br>
+                            อยู่ระหว่างรอ <strong><?= Html::encode($model->approver?->displayName() ?? '-') ?></strong> ตรวจสอบความถูกต้องก่อนเสนอต่อรอง ผอ.
+                        </div>
+                    <?php endif; ?>
 
                 <?php elseif ($model->status === Document::STATUS_SUBMITTED_TO_DEPUTY): ?>
                     <?php if ($canGiveDeputyComment): ?>
@@ -502,11 +609,38 @@ if ($previewPdfUrl) {
                         <?= Html::submitButton('<i class="bi bi-check2-square" aria-hidden="true"></i><span>บันทึกคำสั่งและมอบหมาย</span>', ['class' => 'btn btn-primary w-100 mt-3']) ?>
                     <?= Html::endForm() ?>
 
-                <?php elseif ($model->status === Document::STATUS_RETURNED && $canSubmitToDeputy): ?>
-                    <?= Html::beginForm(['submit-to-deputy', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
+                <?php elseif ($model->status === Document::STATUS_RETURNED && $canSubmitToApprover): ?>
+                    <?php $systemApprover = \common\models\SystemSetting::getDocumentApprover(); ?>
+                    <?= Html::beginForm(['submit-to-approver', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
                         <?= $csrf ?>
-                        <p class="muted-text">รอง ผอ. ส่งกลับให้แก้ไข เมื่อตรวจแก้ข้อมูล/เอกสารแล้ว ให้เสนอรอง ผอ. อีกครั้ง</p>
-                        <?= Html::submitButton('<i class="bi bi-send" aria-hidden="true"></i><span>แก้ไขแล้ว เสนอรอง ผอ. อีกครั้ง</span>', ['class' => 'btn btn-primary w-100']) ?>
+                        <div class="alert alert-danger py-2 px-3 small mb-3">
+                            <i class="bi bi-exclamation-triangle me-1"></i>หนังสือถูกส่งกลับให้แก้ไข เมื่อตรวจแก้ข้อมูลแล้ว ให้เสนอผู้ตรวจสอบอีกครั้ง
+                        </div>
+                        <?php if ($systemApprover !== null): ?>
+                            <div class="alert alert-light border py-2 px-3 small mb-3">
+                                <div class="text-muted small">ผู้ตรวจสอบ/อนุมัติ (กำหนดโดย Admin):</div>
+                                <div class="fw-bold text-dark fs-6 mt-1">
+                                    <i class="bi bi-shield-check text-primary me-1"></i><?= Html::encode($systemApprover->displayName()) ?>
+                                    <span class="badge bg-secondary ms-1"><?= Html::encode($systemApprover->roleLabel()) ?></span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted" for="re-submit-comment">หมายเหตุการแก้ไข (ถ้ามี)</label>
+                                <?= Html::textarea('comment', '', [
+                                    'id' => 're-submit-comment',
+                                    'class' => 'form-control',
+                                    'rows' => 2,
+                                    'placeholder' => 'แก้ไขตามคำแนะนำแล้ว...',
+                                ]) ?>
+                            </div>
+                            <?= Html::submitButton('<i class="bi bi-send-check me-1" aria-hidden="true"></i><span>แก้ไขแล้ว เสนอผู้ตรวจสอบอีกครั้ง</span>', ['class' => 'btn btn-primary w-100']) ?>
+                        <?php else: ?>
+                            <div class="alert alert-warning py-2 px-3 small mb-0">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                <strong>ยังไม่ได้กำหนดผู้ตรวจสอบในระบบ</strong><br>
+                                กรุณาแจ้ง Admin เพื่อตั้งค่าผู้ตรวจสอบ/อนุมัติในหน้า "ผู้ใช้และบทบาท"
+                            </div>
+                        <?php endif; ?>
                     <?= Html::endForm() ?>
 
                 <?php elseif ($model->status === Document::STATUS_ASSIGNED && ($canForwardAssignment || $canCompleteAssignment)): ?>

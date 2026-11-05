@@ -23,6 +23,7 @@ $this->params['breadcrumbs'][] = $this->title;
 $this->registerCssFile('@web/css/eoffice.css', ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
 
 $departmentItems = ArrayHelper::map($departments, 'id', 'name');
+$allUserItems = ArrayHelper::map($allUsers ?? [], 'id', static fn (\common\models\User $u): string => $u->displayName() . ' (' . $u->roleLabel() . ')');
 $thaiDate = static function (?string $date): string {
     if ($date === null || $date === '') {
         return '-';
@@ -106,15 +107,42 @@ $thaiTime = static function (?string $time): string {
             ])->hint('สรุปเนื้อหาในหนังสือโดยย่อ (หากเว้นว่างไว้ ระบบจะยกชื่อเรื่องมาเป็นข้อมูลสรุปตั้งต้น และสามารถแก้ไขได้ในภายหลัง)') ?>
 
             <div class="row">
-                <div class="col-md-4">
-                    <?= $activeForm->field($form->document, 'urgency')->dropDownList(Document::urgencyOptions()) ?>
-                </div>
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <?= $activeForm->field($form->document, 'department_id')
                         ->dropDownList($departmentItems, ['prompt' => 'เลือกกลุ่มงาน (กำหนดสายบังคับบัญชา)'])
                         ->hint('สายการเสนอเอกสารจะวิ่งไปหารอง ผอ. ประจำกลุ่มงานนี้โดยอัตโนมัติ') ?>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-6">
+                    <?php $systemApprover = \common\models\SystemSetting::getDocumentApprover(); ?>
+                    <div class="mb-3">
+                        <label class="form-label text-muted">ผู้ตรวจสอบ/อนุมัติ (ก่อนเสนอรอง ผอ.)</label>
+                        <?php if ($systemApprover !== null): ?>
+                            <div class="p-2 border rounded bg-light d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-shield-check text-primary fs-5"></i>
+                                    <div>
+                                        <strong class="text-dark"><?= Html::encode($systemApprover->displayName()) ?></strong>
+                                        <span class="badge bg-secondary ms-1"><?= Html::encode($systemApprover->roleLabel()) ?></span>
+                                    </div>
+                                </div>
+                                <span class="badge bg-info-subtle text-info border border-info-subtle">กำหนดโดย Admin</span>
+                            </div>
+                            <div class="form-text text-muted">หนังสือจะถูกส่งให้ผู้ตรวจท่านนี้พิจารณาก่อนเสนอต่อรอง ผอ. โดยอัตโนมัติ</div>
+                        <?php else: ?>
+                            <div class="p-2 border border-warning rounded bg-warning-subtle text-dark small">
+                                <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
+                                <strong>ยังไม่ได้กำหนดผู้ตรวจในระบบ</strong> กรุณาแจ้ง Admin ให้ตั้งค่าในหน้าผู้ใช้และบทบาท
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <?= $activeForm->field($form->document, 'urgency')->dropDownList(Document::urgencyOptions()) ?>
+                </div>
+                <div class="col-md-6">
                     <?= $activeForm->field($form->document, 'due_date')->input('date') ?>
                 </div>
             </div>

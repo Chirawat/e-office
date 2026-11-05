@@ -22,6 +22,7 @@ use yii\db\ActiveRecord;
  * @property string $urgency
  * @property string $confidentiality
  * @property int|null $department_id
+ * @property int|null $approver_id
  * @property string|null $due_date
  * @property string $status
  * @property string|null $note
@@ -29,6 +30,7 @@ use yii\db\ActiveRecord;
 class Document extends ActiveRecord
 {
     public const STATUS_REGISTERED = 'registered';
+    public const STATUS_SUBMITTED_TO_APPROVER = 'submitted_to_approver';
     public const STATUS_SUBMITTED_TO_DEPUTY = 'submitted_to_deputy';
     public const STATUS_SUBMITTED_TO_DIRECTOR = 'submitted_to_director';
     public const STATUS_ASSIGNED = 'assigned';
@@ -62,7 +64,7 @@ class Document extends ActiveRecord
         return [
             [['receive_no', 'receive_date', 'sender', 'subject', 'department_id'], 'required'],
             [['receive_date', 'receive_time', 'external_date', 'due_date'], 'safe'],
-            [['department_id'], 'integer'],
+            [['department_id', 'approver_id'], 'integer'],
             [['note', 'summary'], 'string'],
             [['receive_no'], 'string', 'max' => 50],
             [['external_no'], 'string', 'max' => 120],
@@ -71,6 +73,7 @@ class Document extends ActiveRecord
             [['urgency', 'confidentiality', 'status'], 'string', 'max' => 40],
             [['receive_no'], 'unique'],
             [['department_id'], 'exist', 'targetClass' => Department::class, 'targetAttribute' => ['department_id' => 'id']],
+            [['approver_id'], 'exist', 'targetClass' => User::class, 'targetAttribute' => ['approver_id' => 'id']],
         ];
     }
 
@@ -102,6 +105,7 @@ class Document extends ActiveRecord
             'urgency' => 'ความเร่งด่วน',
             'confidentiality' => 'ชั้นความลับ',
             'department_id' => 'กลุ่มงานที่เกี่ยวข้อง',
+            'approver_id' => 'ผู้ตรวจสอบ/อนุมัติ',
             'due_date' => 'วันครบกำหนด',
             'status' => 'สถานะ',
             'note' => 'หมายเหตุ',
@@ -122,12 +126,18 @@ class Document extends ActiveRecord
     {
         return [
             self::STATUS_REGISTERED => 'ลงทะเบียนรับแล้ว',
+            self::STATUS_SUBMITTED_TO_APPROVER => 'รอตรวจสอบ/อนุมัติ',
             self::STATUS_SUBMITTED_TO_DEPUTY => 'รอรอง ผอ.',
             self::STATUS_SUBMITTED_TO_DIRECTOR => 'รอ ผอ. สั่งการ',
             self::STATUS_ASSIGNED => 'มอบหมายแล้ว',
             self::STATUS_RETURNED => 'ส่งกลับแก้ไข',
             self::STATUS_COMPLETED => 'เสร็จสิ้น',
         ];
+    }
+
+    public function getApprover(): ActiveQuery
+    {
+        return $this->hasOne(User::class, ['id' => 'approver_id']);
     }
 
     public function getDepartment(): ActiveQuery

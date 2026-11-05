@@ -53,6 +53,9 @@ class DocumentController extends Controller
                     'generate-stamped-pdf' => ['post'],
                     'update-stamp-positions' => ['post'],
                     'update-summary' => ['post'],
+                    'submit-to-approver' => ['post'],
+                    'approver-approve' => ['post'],
+                    'approver-return' => ['post'],
                 ],
             ],
         ];
@@ -203,11 +206,35 @@ class DocumentController extends Controller
         // 1. ดึงข้อมูลหนังสือภายนอกที่เกี่ยวข้องกับตนเอง
         $docQuery = Document::find()
             ->with(['department', 'originalFile'])
-            ->where(['{{%document}}.[[status]]' => $statuses])
             ->orderBy(['{{%document}}.[[updated_at]]' => SORT_DESC, '{{%document}}.[[id]]' => SORT_DESC]);
 
-        if ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
-            $this->applyStaffAssignmentScope($docQuery, $identity);
+        if ($identity->hasRole(User::ROLE_ADMIN)) {
+            $docQuery->where(['{{%document}}.[[status]]' => $statuses]);
+        } elseif ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
+            $assignedScopeQuery = Document::find();
+            $this->applyStaffAssignmentScope($assignedScopeQuery, $identity);
+            $assignedDocIds = $assignedScopeQuery->select('{{%document}}.[[id]]')->column();
+
+            $staffConds = ['or'];
+            if ($assignedDocIds !== []) {
+                $staffConds[] = ['and', ['{{%document}}.[[status]]' => $statuses], ['{{%document}}.[[id]]' => $assignedDocIds]];
+            }
+            $staffConds[] = [
+                'and',
+                ['{{%document}}.[[status]]' => Document::STATUS_SUBMITTED_TO_APPROVER],
+                ['{{%document}}.[[approver_id]]' => $identity->id],
+            ];
+            $docQuery->where($staffConds);
+        } else {
+            $docQuery->where([
+                'or',
+                ['{{%document}}.[[status]]' => $statuses],
+                [
+                    'and',
+                    ['{{%document}}.[[status]]' => Document::STATUS_SUBMITTED_TO_APPROVER],
+                    ['{{%document}}.[[approver_id]]' => $identity->id],
+                ],
+            ]);
         }
 
         if ($keyword !== '') {
@@ -305,8 +332,11 @@ class DocumentController extends Controller
 
         $form = new DocumentForm();
         $form->document->receive_no = $this->suggestNextReceiveNo();
+        $form->document->approver_id = SystemSetting::getDocumentApproverId();
 
         if (Yii::$app->request->isPost && $form->load(Yii::$app->request->post())) {
+            // บังคับใช้ approver_id จากการตั้งค่าของ Admin เสมอ
+            $form->document->approver_id = SystemSetting::getDocumentApproverId();
             $document = $form->save();
             if ($document !== null) {
                 $this->regenerateStampedPdf($document, false);
@@ -341,6 +371,10 @@ class DocumentController extends Controller
         }
 
         $allDeputyNames = array_map(static fn (User $u): string => $u->displayName(), $deputyUsers);
+        $allUsers = User::find()
+            ->where(['status' => User::STATUS_ACTIVE])
+            ->orderBy([new \yii\db\Expression("COALESCE(NULLIF(fullname, ''), username) ASC")])
+            ->all();
 
         return $this->render('create', [
             'form' => $form,
@@ -350,6 +384,7 @@ class DocumentController extends Controller
             'effectiveDirectorPosition' => $effectiveDirectorPosition,
             'deputyByDept' => $deputyByDept,
             'allDeputyNames' => $allDeputyNames,
+            'allUsers' => $allUsers,
         ]);
     }
 
@@ -387,8 +422,172 @@ class DocumentController extends Controller
             'model' => $model,
             'departments' => Department::find()->where(['is_active' => true])->orderBy(['sort_order' => SORT_ASC])->all(),
             'staffUsers' => $staffQuery->all(),
+            'allUsers' => User::find()
+                ->where(['status' => User::STATUS_ACTIVE])
+                ->orderBy([new \yii\db\Expression("COALESCE(NULLIF(fullname, ''), username) ASC")])
+                ->all(),
             'previewImagePath' => $this->previewImagePath($model),
         ]);
+    }
+
+    public function actionSubmitToApprover(int $id): Response
+    {
+        $this->requireRole([User::ROLE_OFFICER, User::ROLE_ADMIN], 'เฉพาะเจ้าหน้าที่ธุรการหรือผู้ดูแลระบบเท่านั้นที่เสนอผู้ตรวจสอบได้');
+
+        $model = $this->findModel($id);
+        if (!in_array($model->status, [Document::STATUS_REGISTERED, Document::STATUS_RETURNED], true)) {
+            Yii::$app->session->setFlash('warning', 'หนังสือไม่ได้อยู่ในสถานะที่สามารถเสนอผู้ตรวจสอบได้');
+            return $this->redirect(['view', 'id' => $model->id]);
+        }
+
+        // ผู้ตรวจสอบถูกกำหนดโดย Admin ในหน้า user/index เท่านั้น (ธุรการไม่สามารถเลือกหรือเปลี่ยนเองได้)
+        $approver = SystemSetting::getDocumentApprover();
+        if ($approver === null) {
+            Yii::$app->session->setFlash('error', 'ยังไม่ได้กำหนดผู้ตรวจสอบ/อนุมัติในระบบ กรุณาติดต่อผู้ดูแลระบบ (Admin) เพื่อตั้งค่าในหน้าผู้ใช้และบทบาท');
+            return $this->redirect(['view', 'id' => $model->id]);
+        }
+
+        $model->approver_id = $approver->id;
+
+        $comment = trim((string) Yii::$app->request->post('comment', ''));
+        $actionComment = $comment !== '' ? $comment : 'เสนอให้ ' . $approver->displayName() . ' ตรวจสอบ/อนุมัติ';
+
+        $model->save(false, ['approver_id']);
+        $this->changeStatus(
+            $model,
+            Document::STATUS_SUBMITTED_TO_APPROVER,
+            'submit_to_approver',
+            $actionComment,
+        );
+        $this->regenerateStampedPdf($model);
+
+        // ส่งแจ้งเตือน LINE ให้ผู้ตรวจสอบ
+        $identity = Yii::$app->user->identity;
+        if ($identity instanceof User) {
+            (new LineMessagingService())->notifyDocumentWorkflow(
+                $approver,
+                $model,
+                $identity,
+                'มีหนังสือรับใหม่รอท่านตรวจสอบและอนุมัติ',
+                $comment
+            );
+        }
+
+        Yii::$app->session->setFlash('success', 'เสนอหนังสือให้ ' . $approver->displayName() . ' ตรวจสอบ/อนุมัติเรียบร้อยแล้ว');
+        return $this->redirect(['view', 'id' => $model->id]);
+    }
+
+    public function actionApproverApprove(int $id): Response
+    {
+        $model = $this->findModel($id);
+        $identity = Yii::$app->user->identity;
+
+        if (!$identity instanceof User || !($identity->hasRole(User::ROLE_ADMIN) || (int) $identity->id === (int) $model->approver_id)) {
+            throw new ForbiddenHttpException('เฉพาะผู้ตรวจสอบ/อนุมัติที่ได้รับมอบหมายหรือผู้ดูแลระบบเท่านั้นที่อนุมัติได้');
+        }
+
+        if ($model->status !== Document::STATUS_SUBMITTED_TO_APPROVER) {
+            Yii::$app->session->setFlash('warning', 'หนังสือไม่ได้อยู่ในสถานะรอตรวจสอบ/อนุมัติ');
+            return $this->redirect(['view', 'id' => $model->id]);
+        }
+
+        // กรณีตรวจพบว่าติ๊กกลุ่มงานผิด ผู้ตรวจสอบสามารถแก้ไขกลุ่มงานใหม่ได้ทันที
+        $newDeptId = (int) Yii::$app->request->post('department_id', 0);
+        $deptChangedNote = '';
+        $newDept = null;
+        if ($newDeptId > 0 && $newDeptId !== (int) $model->department_id) {
+            $newDept = Department::findOne(['id' => $newDeptId, 'is_active' => true]);
+            if ($newDept !== null) {
+                $oldDeptName = $model->department?->name ?? 'ไม่ระบุ';
+                $model->department_id = $newDept->id;
+                $model->save(false, ['department_id']);
+                $model->refresh();
+                $deptChangedNote = " (ผู้ตรวจสอบแก้ไขกลุ่มงานจาก {$oldDeptName} เป็น {$newDept->name})";
+            }
+        }
+
+        $comment = trim((string) Yii::$app->request->post('comment', ''));
+        if ($comment !== '') {
+            $actionComment = $comment . $deptChangedNote;
+        } else {
+            $actionComment = 'อนุมัติความถูกต้องและเสนอต่อรอง ผอ.' . $deptChangedNote;
+        }
+
+        $this->changeStatus(
+            $model,
+            Document::STATUS_SUBMITTED_TO_DEPUTY,
+            'approver_approved',
+            $actionComment,
+        );
+        $this->regenerateStampedPdf($model);
+
+        // แจ้งเตือน รอง ผอ. ประจำกลุ่มงาน (กลุ่มงานที่ผู้ตรวจเลือก/ยืนยัน)
+        $deputy = User::find()
+            ->where(['role' => User::ROLE_DEPUTY_DIRECTOR, 'status' => User::STATUS_ACTIVE])
+            ->joinWith('departments')
+            ->andWhere(['or',
+                ['{{%user}}.department_id' => $model->department_id],
+                ['user_department.department_id' => $model->department_id],
+            ])
+            ->one();
+
+        if ($deputy instanceof User) {
+            (new LineMessagingService())->notifyDocumentWorkflow(
+                $deputy,
+                $model,
+                $identity,
+                'มีหนังสือรับผ่านการอนุมัติ เสนอถึงท่านเพื่อลงความเห็น',
+                $comment
+            );
+        }
+
+        if ($newDept !== null) {
+            Yii::$app->session->setFlash('success', 'แก้ไขกลุ่มงานเป็น "' . $newDept->name . '" พร้อมอนุมัติและเสนอต่อรอง ผอ. เรียบร้อยแล้ว');
+        } else {
+            Yii::$app->session->setFlash('success', 'อนุมัติหนังสือและเสนอต่อรอง ผอ. เรียบร้อยแล้ว');
+        }
+        return $this->redirect(['view', 'id' => $model->id]);
+    }
+
+    public function actionApproverReturn(int $id): Response
+    {
+        $model = $this->findModel($id);
+        $identity = Yii::$app->user->identity;
+
+        if (!$identity instanceof User || !($identity->hasRole(User::ROLE_ADMIN) || (int) $identity->id === (int) $model->approver_id)) {
+            throw new ForbiddenHttpException('เฉพาะผู้ตรวจสอบ/อนุมัติที่ได้รับมอบหมายหรือผู้ดูแลระบบเท่านั้นที่ส่งกลับได้');
+        }
+
+        if ($model->status !== Document::STATUS_SUBMITTED_TO_APPROVER) {
+            Yii::$app->session->setFlash('warning', 'หนังสือไม่ได้อยู่ในสถานะรอตรวจสอบ/อนุมัติ');
+            return $this->redirect(['view', 'id' => $model->id]);
+        }
+
+        $comment = trim((string) Yii::$app->request->post('comment', ''));
+        $actionComment = $comment !== '' ? $comment : 'ส่งกลับให้เจ้าหน้าที่ธุรการแก้ไข';
+
+        $this->changeStatus(
+            $model,
+            Document::STATUS_RETURNED,
+            'approver_returned',
+            $actionComment,
+        );
+        $this->regenerateStampedPdf($model);
+
+        // แจ้งเตือนเจ้าหน้าที่ธุรการผู้ลงทะเบียน
+        $officer = User::findOne($model->created_by);
+        if ($officer instanceof User) {
+            (new LineMessagingService())->notifyDocumentWorkflow(
+                $officer,
+                $model,
+                $identity,
+                'หนังสือรับถูกส่งกลับให้แก้ไข',
+                $comment
+            );
+        }
+
+        Yii::$app->session->setFlash('info', 'ส่งกลับหนังสือให้เจ้าหน้าที่ธุรการแก้ไขเรียบร้อยแล้ว');
+        return $this->redirect(['view', 'id' => $model->id]);
     }
 
     public function actionSubmitToDeputy(int $id): Response
@@ -709,6 +908,7 @@ class DocumentController extends Controller
         if ($identity->hasRole(User::ROLE_ADMIN)) {
             return [
                 Document::STATUS_REGISTERED,
+                Document::STATUS_SUBMITTED_TO_APPROVER,
                 Document::STATUS_SUBMITTED_TO_DEPUTY,
                 Document::STATUS_SUBMITTED_TO_DIRECTOR,
                 Document::STATUS_ASSIGNED,
@@ -895,6 +1095,12 @@ class DocumentController extends Controller
         if ($identity->hasRole([User::ROLE_ADMIN, User::ROLE_OFFICER, User::ROLE_DEPUTY_DIRECTOR, User::ROLE_DIRECTOR])) {
             return true;
         }
+
+        // กรณีเป็นผู้ได้รับมอบหมายให้ตรวจสอบ/อนุมัติ (approver)
+        if ($model->approver_id !== null && (int) $model->approver_id === (int) $identity->id) {
+            return true;
+        }
+
         if ($identity->role !== User::ROLE_STAFF && $identity->role !== User::ROLE_GENERAL_USER) {
             return false;
         }
@@ -929,6 +1135,10 @@ class DocumentController extends Controller
         }
 
         if ($identity->hasRole([User::ROLE_ADMIN, User::ROLE_OFFICER, User::ROLE_DIRECTOR])) {
+            return true;
+        }
+
+        if ($model->approver_id !== null && (int) $model->approver_id === (int) $identity->id) {
             return true;
         }
 

@@ -11,6 +11,7 @@ use yii\helpers\Html;
 /** @var int|null $currentStatus */
 /** @var int $pendingCount */
 /** @var int $activeCount */
+/** @var User[]|null $activeUsers */
 
 $this->title = 'ผู้ใช้และบทบาท';
 $this->params['breadcrumbs'][] = $this->title;
@@ -65,6 +66,63 @@ $currentUserId = (int) Yii::$app->user->id;
                             : 'ต้องการเปิดโหมดอนุมัติอัตโนมัติใช่หรือไม่? (ผู้สมัครใหม่จะได้รับสิทธิ์เข้าใช้งานทันที)',
                     ]
                 ) ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- กล่องกำหนดผู้ตรวจสอบ/อนุมัติหนังสือรับ (ก่อนเสนอรอง ผอ.) -->
+    <?php
+    $currentApprover = \common\models\SystemSetting::getDocumentApprover();
+    $approverUserList = $activeUsers ?? \common\models\User::find()->where(['status' => \common\models\User::STATUS_ACTIVE])->orderBy([new \yii\db\Expression("COALESCE(NULLIF(fullname, ''), username) ASC")])->all();
+    $approverOptions = ['' => '-- ยังไม่กำหนดผู้ตรวจสอบ --'];
+    foreach ($approverUserList as $u) {
+        $deptSuffix = $u->department ? ' - ' . $u->department->name : '';
+        $approverOptions[$u->id] = $u->displayName() . ' (' . $u->roleLabel() . $deptSuffix . ')';
+    }
+    ?>
+    <div class="card border-0 shadow-sm mb-3 <?= $currentApprover !== null ? 'bg-primary-subtle border-start border-4 border-primary' : 'bg-light border-start border-4 border-warning' ?>">
+        <div class="card-body p-3">
+            <div class="row align-items-center g-3">
+                <div class="col-lg-6">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center <?= $currentApprover !== null ? 'bg-primary text-white' : 'bg-warning text-dark' ?>" style="width: 38px; height: 38px; flex-shrink: 0;">
+                            <i class="bi bi-shield-check fs-5"></i>
+                        </div>
+                        <div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <strong class="text-dark">ผู้ตรวจสอบ/อนุมัติหนังสือรับ (ก่อนเสนอรอง ผอ.)</strong>
+                                <?php if ($currentApprover !== null): ?>
+                                    <span class="badge bg-primary text-white px-2 py-0">กำหนดแล้ว</span>
+                                <?php else: ?>
+                                    <span class="badge bg-warning text-dark px-2 py-0">ยังไม่กำหนด</span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="small text-muted mt-1">
+                                <?php if ($currentApprover !== null): ?>
+                                    ปัจจุบันคือ: <strong class="text-primary"><?= Html::encode($currentApprover->displayName()) ?></strong>
+                                    (<?= Html::encode($currentApprover->roleLabel()) ?><?= $currentApprover->department ? ' - ' . Html::encode($currentApprover->department->name) : '' ?>)
+                                    <span class="text-secondary ms-1">| ธุรการจะไม่สามารถเปลี่ยนผู้ตรวจเองได้</span>
+                                <?php else: ?>
+                                    <span class="text-danger">ยังไม่ได้ระบุผู้ตรวจสอบ — เจ้าหน้าที่ธุรการจะไม่สามารถส่งเสนอตรวจสอบหนังสือได้</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <?= Html::beginForm(['set-document-approver'], 'post', ['class' => 'd-flex align-items-center gap-2 justify-content-lg-end']) ?>
+                        <?= $csrf ?>
+                        <div class="flex-grow-1" style="max-width: 340px;">
+                            <?= Html::dropDownList('approver_id', $currentApprover?->id, $approverOptions, [
+                                'class' => 'form-select form-select-sm',
+                                'aria-label' => 'เลือกผู้ตรวจสอบหนังสือรับ',
+                            ]) ?>
+                        </div>
+                        <?= Html::submitButton('<i class="bi bi-check2-circle me-1"></i>บันทึก', [
+                            'class' => 'btn btn-sm btn-primary fw-semibold px-3 py-1 text-nowrap shadow-sm',
+                        ]) ?>
+                    <?= Html::endForm() ?>
+                </div>
             </div>
         </div>
     </div>

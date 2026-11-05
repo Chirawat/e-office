@@ -42,6 +42,7 @@ class UserController extends Controller
                     'reset-password' => ['post'],
                     'delete' => ['post'],
                     'toggle-auto-approve' => ['post'],
+                    'set-document-approver' => ['post'],
                 ],
             ],
         ];
@@ -72,6 +73,10 @@ class UserController extends Controller
 
         $pendingCount = (int) User::find()->where(['status' => User::STATUS_INACTIVE])->count();
         $activeCount = (int) User::find()->where(['status' => User::STATUS_ACTIVE])->count();
+        $activeUsers = User::find()
+            ->where(['status' => User::STATUS_ACTIVE])
+            ->orderBy([new Expression("COALESCE(NULLIF(fullname, ''), username) ASC")])
+            ->all();
 
         return $this->render('index', [
             'dataProvider' => new ActiveDataProvider([
@@ -81,6 +86,7 @@ class UserController extends Controller
             'currentStatus' => $status,
             'pendingCount' => $pendingCount,
             'activeCount' => $activeCount,
+            'activeUsers' => $activeUsers,
         ]);
     }
 
@@ -211,6 +217,37 @@ class UserController extends Controller
             Yii::$app->session->setFlash('success', 'เปิดใช้งานโหมดอนุมัติอัตโนมัติ (Auto Approve) เรียบร้อยแล้ว สมาชิกใหม่จะได้รับอนุมัติทันที');
         } else {
             Yii::$app->session->setFlash('info', 'ปิดใช้งานโหมดอนุมัติอัตโนมัติเรียบร้อยแล้ว สมาชิกใหม่จะต้องรอ Admin ตรวจสอบและกดอนุมัติ');
+        }
+
+        return $this->redirect(Yii::$app->request->referrer ?: ['index']);
+    }
+
+    public function actionSetDocumentApprover(): Response
+    {
+        $this->requireAdmin();
+        $approverId = (int) Yii::$app->request->post('approver_id', 0);
+
+        if ($approverId > 0) {
+            $user = User::findOne(['id' => $approverId, 'status' => User::STATUS_ACTIVE]);
+            if ($user === null) {
+                Yii::$app->session->setFlash('error', 'ไม่พบผู้ใช้ที่เลือกหรือผู้ใช้นี้ไม่ได้อยู่ในสถานะเปิดใช้งาน');
+                return $this->redirect(['index']);
+            }
+            SystemSetting::set(
+                SystemSetting::KEY_DOCUMENT_APPROVER_ID,
+                (string) $user->id,
+                'document',
+                'ผู้ตรวจสอบ/อนุมัติหนังสือรับก่อนเสนอรอง ผอ.'
+            );
+            Yii::$app->session->setFlash('success', 'กำหนดผู้ตรวจสอบ/อนุมัติหนังสือรับเป็น "' . $user->displayName() . '" เรียบร้อยแล้ว');
+        } else {
+            SystemSetting::set(
+                SystemSetting::KEY_DOCUMENT_APPROVER_ID,
+                '',
+                'document',
+                'ผู้ตรวจสอบ/อนุมัติหนังสือรับก่อนเสนอรอง ผอ.'
+            );
+            Yii::$app->session->setFlash('info', 'ยกเลิกการกำหนดผู้ตรวจสอบ/อนุมัติหนังสือรับแล้ว');
         }
 
         return $this->redirect(Yii::$app->request->referrer ?: ['index']);

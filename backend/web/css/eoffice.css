@@ -561,6 +561,12 @@ body {
     color: #1d4ed8;
 }
 
+.status-badge-submitted-to-approver {
+    border-color: #fde68a;
+    background: #fefce8;
+    color: #b45309;
+}
+
 .status-badge-draft {
     border-color: #cbd5e1;
     background: #f8fafc;
