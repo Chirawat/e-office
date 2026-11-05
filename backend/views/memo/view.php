@@ -15,7 +15,8 @@ use yii\helpers\Url;
 $this->title = ($model->memo_no ? $model->memo_no . ' - ' : '') . $model->subject;
 $this->params['breadcrumbs'][] = ['label' => 'บันทึกเสนอ', 'url' => ['index']];
 $this->params['breadcrumbs'][] = $model->memo_no ?: 'รายละเอียด';
-$this->registerCssFile('@web/css/eoffice.css', ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
+$cssVer = file_exists(Yii::getAlias('@backend/web/css/eoffice.css')) ? filemtime(Yii::getAlias('@backend/web/css/eoffice.css')) : time();
+$this->registerCssFile("@web/css/eoffice.css?v={$cssVer}", ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
 
 $this->registerCss('
 /* ป้องกันการล้นจอแนวนอนและขยายมุมมอง PDF ให้เต็มความกว้างของจอมือถือ */
@@ -271,8 +272,10 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                                         data-stamp-box="<?= Html::encode((string) $type) ?>"
                                         data-width-mm="<?= Html::encode((string) $config['w']) ?>"
                                         data-height-mm="<?= Html::encode((string) $config['h']) ?>"
+                                        title="คลิกแล้วลากเพื่อปรับตำแหน่งลายเซ็น"
                                     >
-                                        <span><?= Html::encode($config['label']) ?></span>
+                                        <span class="stamp-drag-handle"><i class="bi bi-arrows-move me-1"></i>ลากย้าย</span>
+                                        <span class="stamp-box-title"><?= Html::encode($config['label']) ?></span>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
@@ -324,39 +327,21 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                     <h2>ตำแหน่งประทับลายเซ็น</h2>
                     <?= Html::beginForm(['update-stamp-positions', 'id' => $model->id], 'post', ['class' => 'stamp-position-form']) ?>
                         <?= $csrf ?>
-                        <p class="muted-text">หน่วยเป็นมิลลิเมตรจากซ้าย/บนของหน้าแรก ปรับแล้ว preview จะขยับทันที</p>
                         <?php foreach ($stampPositionDefaults as $type => $config): ?>
-                            <div class="stamp-position-row">
-                                <strong><?= Html::encode($config['label']) ?></strong>
-                                <div class="stamp-slider" data-stamp-control="<?= Html::encode((string) $type) ?>">
-                                    <label>
-                                        <span>X <output data-output="x"><?= Html::encode((string) $stampPosition((string) $type, 'x')) ?></output></span>
-                                        <?= Html::input('range', "stamps[$type][x]", (string) $stampPosition((string) $type, 'x'), [
-                                            'class' => 'form-range',
-                                            'step' => '0.5',
-                                            'min' => '0',
-                                            'max' => '216',
-                                            'data-axis' => 'x',
-                                            'data-stamp-input' => $type,
-                                        ]) ?>
-                                    </label>
-                                    <label>
-                                        <span>Y <output data-output="y"><?= Html::encode((string) $stampPosition((string) $type, 'y')) ?></output></span>
-                                        <?= Html::input('range', "stamps[$type][y]", (string) $stampPosition((string) $type, 'y'), [
-                                            'class' => 'form-range',
-                                            'step' => '0.5',
-                                            'min' => '0',
-                                            'max' => '297',
-                                            'data-axis' => 'y',
-                                            'data-stamp-input' => $type,
-                                        ]) ?>
-                                    </label>
-                                </div>
+                            <div data-stamp-control="<?= Html::encode((string) $type) ?>" class="d-none">
+                                <?= Html::hiddenInput("stamps[$type][x]", (string) $stampPosition((string) $type, 'x'), [
+                                    'data-axis' => 'x',
+                                    'data-stamp-input' => $type,
+                                ]) ?>
+                                <?= Html::hiddenInput("stamps[$type][y]", (string) $stampPosition((string) $type, 'y'), [
+                                    'data-axis' => 'y',
+                                    'data-stamp-input' => $type,
+                                ]) ?>
                             </div>
                         <?php endforeach; ?>
 
                         <?php if ($canEdit): ?>
-                            <div class="mt-3 p-3 bg-light rounded border">
+                            <div class="mt-2 p-3 bg-light rounded border">
                                 <label class="form-label mb-1"><strong><i class="bi bi-send me-1"></i>ส่งเสนอถึง:</strong></label>
                                 <?= Html::dropDownList('target', 'staff', [
                                     'staff' => 'หัวหน้ากลุ่มงาน / เจ้าหน้าที่',
@@ -368,12 +353,12 @@ $this->registerJsFile('@web/js/pdf.min.js', [
                                         <i class="bi bi-send-check-fill me-1"></i> บันทึกตำแหน่งและเสนอต่อทันที
                                     </button>
                                     <button type="submit" name="submit_after_save" value="0" class="btn btn-outline-primary btn-sm">
-                                        <i class="bi bi-save me-1"></i> บันทึกตำแหน่งอย่างเดียว
+                                        <i class="bi bi-save me-1"></i> บันทึกตำแหน่งใหม่
                                     </button>
                                 </div>
                             </div>
                         <?php else: ?>
-                            <?= Html::submitButton('<i class="bi bi-save me-1" aria-hidden="true"></i><span>บันทึกตำแหน่งและสร้าง PDF ใหม่</span>', ['class' => 'btn btn-primary w-100 mt-2']) ?>
+                            <?= Html::submitButton('<i class="bi bi-save me-1" aria-hidden="true"></i><span>บันทึกตำแหน่งใหม่</span>', ['class' => 'btn btn-primary w-100']) ?>
                         <?php endif; ?>
                     <?= Html::endForm() ?>
                 </section>
@@ -539,11 +524,13 @@ $this->registerJs(<<<'JS'
         const yInput = control.querySelector('[data-axis="y"]');
         const x = parseFloat(xInput.value || '0');
         const y = parseFloat(yInput.value || '0');
-        const width = parseFloat(box.dataset.widthMm || '50');
-        const height = parseFloat(box.dataset.heightMm || '23');
+        const width = parseFloat(box.dataset.widthMm || '68');
+        const height = parseFloat(box.dataset.heightMm || '33');
 
-        control.querySelector('[data-output="x"]').textContent = rounded(x);
-        control.querySelector('[data-output="y"]').textContent = rounded(y);
+        const xOut = control.querySelector('[data-output="x"]');
+        const yOut = control.querySelector('[data-output="y"]');
+        if (xOut) xOut.textContent = rounded(x);
+        if (yOut) yOut.textContent = rounded(y);
 
         box.style.left = `${(x / pageWidth) * 100}%`;
         box.style.top = `${(y / pageHeight) * 100}%`;
@@ -551,17 +538,140 @@ $this->registerJs(<<<'JS'
         box.style.height = `${(height / pageHeight) * 100}%`;
     }
 
+    function setStampCoords(type, xMm, yMm) {
+        const control = document.querySelector(`[data-stamp-control="${type}"]`);
+        const box = document.querySelector(`[data-stamp-box="${type}"]`);
+        if (!box) return;
+
+        const widthMm = parseFloat(box.dataset.widthMm || '68');
+        const heightMm = parseFloat(box.dataset.heightMm || '33');
+
+        // Clamp inside paper boundaries
+        const maxX = Math.max(0, pageWidth - widthMm);
+        const maxY = Math.max(0, pageHeight - heightMm);
+        const clampedX = Math.max(0, Math.min(maxX, xMm));
+        const clampedY = Math.max(0, Math.min(maxY, yMm));
+
+        const roundedX = Math.round(clampedX * 10) / 10;
+        const roundedY = Math.round(clampedY * 10) / 10;
+
+        if (control) {
+            const xInput = control.querySelector('[data-axis="x"]');
+            const yInput = control.querySelector('[data-axis="y"]');
+            if (xInput) xInput.value = roundedX;
+            if (yInput) yInput.value = roundedY;
+            const xOut = control.querySelector('[data-output="x"]');
+            const yOut = control.querySelector('[data-output="y"]');
+            if (xOut) xOut.textContent = roundedX.toString();
+            if (yOut) yOut.textContent = roundedY.toString();
+        }
+
+        box.style.left = `${(clampedX / pageWidth) * 100}%`;
+        box.style.top = `${(clampedY / pageHeight) * 100}%`;
+        box.style.width = `${(widthMm / pageWidth) * 100}%`;
+        box.style.height = `${(heightMm / pageHeight) * 100}%`;
+    }
+
+    // Interactive Drag & Drop for Stamp Boxes (MS Word-like feel)
+    function initDraggableStampBox(box) {
+        const type = box.dataset.stampBox;
+        let isDragging = false;
+        let startPointerX = 0;
+        let startPointerY = 0;
+        let startLeftPx = 0;
+        let startTopPx = 0;
+        let containerRect = null;
+
+        function onPointerDown(e) {
+            if (e.type === 'mousedown' && e.button !== 0) return;
+
+            if (currentPageNum !== 1) {
+                goToPage(1);
+            }
+
+            isDragging = true;
+            box.classList.add('is-dragging');
+
+            const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
+
+            startPointerX = clientX;
+            startPointerY = clientY;
+
+            const container = document.getElementById('pdf-page-container');
+            containerRect = container.getBoundingClientRect();
+
+            const boxRect = box.getBoundingClientRect();
+            startLeftPx = boxRect.left - containerRect.left;
+            startTopPx = boxRect.top - containerRect.top;
+
+            if (e.cancelable) {
+                e.preventDefault();
+            }
+
+            window.addEventListener('mousemove', onPointerMove, { passive: false });
+            window.addEventListener('mouseup', onPointerUp);
+            window.addEventListener('touchmove', onPointerMove, { passive: false });
+            window.addEventListener('touchend', onPointerUp);
+        }
+
+        function onPointerMove(e) {
+            if (!isDragging || !containerRect) return;
+            if (e.cancelable) {
+                e.preventDefault();
+            }
+
+            const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
+
+            const deltaX = clientX - startPointerX;
+            const deltaY = clientY - startPointerY;
+
+            const newLeftPx = startLeftPx + deltaX;
+            const newTopPx = startTopPx + deltaY;
+
+            const currentContainerWidth = containerRect.width;
+            const currentContainerHeight = containerRect.height;
+            if (currentContainerWidth <= 0 || currentContainerHeight <= 0) return;
+
+            const newX_mm = (newLeftPx / currentContainerWidth) * pageWidth;
+            const newY_mm = (newTopPx / currentContainerHeight) * pageHeight;
+
+            setStampCoords(type, newX_mm, newY_mm);
+        }
+
+        function onPointerUp(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            box.classList.remove('is-dragging');
+
+            window.removeEventListener('mousemove', onPointerMove);
+            window.removeEventListener('mouseup', onPointerUp);
+            window.removeEventListener('touchmove', onPointerMove);
+            window.removeEventListener('touchend', onPointerUp);
+        }
+
+        box.addEventListener('mousedown', onPointerDown);
+        box.addEventListener('touchstart', onPointerDown, { passive: false });
+    }
+
     document.querySelectorAll('[data-stamp-control]').forEach((control) => {
         const type = control.dataset.stampControl;
-        control.querySelectorAll('input[type="range"]').forEach((input) => {
-            input.addEventListener('input', () => {
-                if (currentPageNum !== 1) {
-                    goToPage(1);
-                }
-                updateStamp(type);
-            });
+        control.addEventListener('click', () => {
+            if (currentPageNum !== 1) {
+                goToPage(1);
+            }
+            const box = document.querySelector(`[data-stamp-box="${type}"]`);
+            if (box) {
+                box.classList.add('is-dragging');
+                setTimeout(() => box.classList.remove('is-dragging'), 800);
+            }
         });
         updateStamp(type);
+    });
+
+    document.querySelectorAll('.stamp-preview-box').forEach((box) => {
+        initDraggableStampBox(box);
     });
 
     async function renderPage(num) {
