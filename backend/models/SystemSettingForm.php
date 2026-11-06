@@ -15,13 +15,13 @@ class SystemSettingForm extends Model
     public string $school_name = 'โรงเรียนกุดชุมวิทยาคม';
     public ?string $director_name = '';
     public string $director_position = 'ผู้อำนวยการโรงเรียนกุดชุมวิทยาคม';
-    public ?int $acting_director_user_id = null;
+    public int|string|null $acting_director_user_id = null;
     public ?string $acting_director_name = '';
     public string $acting_director_position = 'รองผู้อำนวยการ รักษาการในตำแหน่งผู้อำนวยการโรงเรียนกุดชุมวิทยาคม';
-    public int $is_acting_director = 0;
-    public int $auto_approve_signup = 0;
-    public int $doc_receive_start_no = 1;
-    public int $doc_receive_year = 2569;
+    public int|string $is_acting_director = 0;
+    public int|string $auto_approve_signup = 0;
+    public int|string $doc_receive_start_no = 1;
+    public int|string $doc_receive_year = 2569;
 
     public function init(): void
     {
@@ -36,6 +36,7 @@ class SystemSettingForm extends Model
             [['doc_receive_start_no'], 'integer', 'min' => 1, 'max' => 999999],
             [['doc_receive_year'], 'integer', 'min' => 2500, 'max' => 2700],
             [['is_acting_director', 'auto_approve_signup'], 'boolean'],
+            [['acting_director_user_id'], 'default', 'value' => null],
             [['acting_director_user_id'], 'integer'],
             [['acting_director_user_id'], 'exist', 'skipOnError' => true, 'targetClass' => \common\models\User::class, 'targetAttribute' => ['acting_director_user_id' => 'id']],
             [['school_name', 'director_name', 'director_position', 'acting_director_name', 'acting_director_position'], 'string', 'max' => 255],
@@ -43,6 +44,18 @@ class SystemSettingForm extends Model
             [['director_position'], 'default', 'value' => 'ผู้อำนวยการโรงเรียนกุดชุมวิทยาคม'],
             [['acting_director_position'], 'default', 'value' => 'รองผู้อำนวยการ รักษาการในตำแหน่งผู้อำนวยการโรงเรียนกุดชุมวิทยาคม'],
         ];
+    }
+
+    public function load($data, $formName = null): bool
+    {
+        $scope = $formName ?? $this->formName();
+        if ($scope !== '' && isset($data[$scope]['acting_director_user_id']) && $data[$scope]['acting_director_user_id'] === '') {
+            $data[$scope]['acting_director_user_id'] = null;
+        } elseif ($scope === '' && isset($data['acting_director_user_id']) && $data['acting_director_user_id'] === '') {
+            $data['acting_director_user_id'] = null;
+        }
+
+        return parent::load($data, $formName);
     }
 
     public function attributeLabels(): array

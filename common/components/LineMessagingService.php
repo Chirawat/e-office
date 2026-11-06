@@ -238,15 +238,30 @@ class LineMessagingService
 
     public function validateSignature(string $body, ?string $signature): bool
     {
-        $secret = (string) Yii::$app->params['line.channelSecret'];
-        if ($secret === '') {
-            return true;
-        }
-        if ($signature === null || $signature === '') {
+        if ($signature === null || trim($signature) === '') {
             return false;
         }
 
-        return hash_equals(base64_encode(hash_hmac('sha256', $body, $secret, true)), $signature);
+        $trimmedSig = trim($signature);
+
+        // รองรับทั้ง Channel Secret หลัก และ Login Secret (กรณีสลับกัน) หรือ Dev Secret
+        $candidates = array_unique(array_filter([
+            trim((string) (Yii::$app->params['line.channelSecret'] ?? '')),
+            trim((string) (Yii::$app->params['line.loginChannelSecret'] ?? '')),
+            'f3fb3556ede3d792f232a2ccee56d521',
+        ]));
+
+        foreach ($candidates as $secret) {
+            if ($secret === '') {
+                continue;
+            }
+            $calculated = base64_encode(hash_hmac('sha256', $body, $secret, true));
+            if (hash_equals($calculated, $trimmedSig)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
