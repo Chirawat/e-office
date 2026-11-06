@@ -86,6 +86,10 @@ class MemoPdfService extends Component
 
     public function generatePreviewImage(Memo $memo, bool $preferStamped = true): ?string
     {
+        if (!function_exists('exec')) {
+            return null;
+        }
+
         $memo = Memo::find()
             ->with(['originalPdfFile', 'files'])
             ->where(['id' => $memo->id])
@@ -131,9 +135,14 @@ class MemoPdfService extends Component
             escapeshellarg($prefix),
         ]);
 
-        exec($command, $output, $exitCode);
-        if ($exitCode !== 0 || !is_file($outputPath)) {
-            Yii::warning('Unable to generate memo PDF preview image: ' . implode("\n", $output), __METHOD__);
+        try {
+            @exec($command, $output, $exitCode);
+            if (($exitCode ?? 1) !== 0 || !is_file($outputPath)) {
+                Yii::warning('Unable to generate memo PDF preview image: ' . implode("\n", (array) ($output ?? [])), __METHOD__);
+                return null;
+            }
+        } catch (\Throwable $e) {
+            Yii::warning('exec pdftoppm failed: ' . $e->getMessage(), __METHOD__);
             return null;
         }
 
@@ -476,6 +485,10 @@ class MemoPdfService extends Component
 
     private function pdftoppmBinary(): ?string
     {
+        if (!function_exists('exec')) {
+            return null;
+        }
+
         $candidates = [
             getenv('EOFFICE_PDFTOPPM') ?: null,
             Yii::getAlias('@app/../runtime/poppler/bin/pdftoppm'),

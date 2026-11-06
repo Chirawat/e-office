@@ -106,13 +106,22 @@ class PdfStampService extends Component
         $stampedFile->mime_type = 'application/pdf';
         $stampedFile->file_size = filesize($outputPath) ?: null;
         $stampedFile->save(false);
-        $this->generatePreviewImage($stampedFile);
+
+        try {
+            $this->generatePreviewImage($stampedFile);
+        } catch (\Throwable $e) {
+            Yii::warning('Preview image generation skipped: ' . $e->getMessage(), __METHOD__);
+        }
 
         return $stampedFile;
     }
 
     public function generatePreviewImage(DocumentFile $file): ?string
     {
+        if (!function_exists('exec')) {
+            return null;
+        }
+
         $sourcePath = Yii::getAlias('@backend/web/' . ltrim($file->storage_path, '/'));
         if (!is_file($sourcePath)) {
             return null;
@@ -146,9 +155,14 @@ class PdfStampService extends Component
             escapeshellarg($prefix),
         ]);
 
-        exec($command, $output, $exitCode);
-        if ($exitCode !== 0 || !is_file($outputPath)) {
-            Yii::warning('Unable to generate PDF preview image: ' . implode("\n", $output), __METHOD__);
+        try {
+            @exec($command, $output, $exitCode);
+            if (($exitCode ?? 1) !== 0 || !is_file($outputPath)) {
+                Yii::warning('Unable to generate PDF preview image: ' . implode("\n", (array) ($output ?? [])), __METHOD__);
+                return null;
+            }
+        } catch (\Throwable $e) {
+            Yii::warning('exec pdftoppm failed: ' . $e->getMessage(), __METHOD__);
             return null;
         }
 
@@ -599,6 +613,10 @@ class PdfStampService extends Component
 
     private function pdftoppmBinary(): ?string
     {
+        if (!function_exists('exec')) {
+            return null;
+        }
+
         $candidates = [
             getenv('EOFFICE_PDFTOPPM') ?: null,
             Yii::getAlias('@app/../runtime/poppler/bin/pdftoppm'),
