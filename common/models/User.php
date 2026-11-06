@@ -302,6 +302,28 @@ class User extends ActiveRecord implements IdentityInterface
     }
 
     /**
+     * สิทธิ์ในการลบหนังสือที่ลงรับแล้ว (เจ้าหน้าที่ธุรการลบหนังสือที่ลงรับแล้วแต่ผิดพลาด หรือ ผู้ดูแลระบบ)
+     */
+    public function canDeleteDocument(Document $document): bool
+    {
+        // 1. ผู้ดูแลระบบ (Admin) มีสิทธิ์สูงสุด สามารถลบหนังสือได้ทุกสถานะ
+        if ($this->role === self::ROLE_ADMIN || $this->hasRole(self::ROLE_ADMIN)) {
+            return true;
+        }
+
+        // 2. เจ้าหน้าที่ธุรการ (Officer) ลบหนังสือที่ลงรับแล้ว (ยังไม่สั่งการ/มอบหมาย) หรือส่งกลับแก้ไข
+        if ($this->hasRole(self::ROLE_OFFICER)) {
+            return in_array($document->status, [
+                Document::STATUS_REGISTERED,
+                Document::STATUS_SUBMITTED_TO_APPROVER,
+                Document::STATUS_RETURNED,
+            ], true);
+        }
+
+        return false;
+    }
+
+    /**
      * {@inheritdoc}
      */
     public static function findIdentity($id): User|null

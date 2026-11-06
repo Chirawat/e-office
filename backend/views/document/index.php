@@ -287,7 +287,7 @@ $pagination = $dataProvider->getPagination();
                         $isMy = in_array((int) $doc->id, $myAssignedDocIds, true);
                         $isRead = isset($readDocMap[(int) $doc->id]);
                         ?>
-                        <a href="<?= $viewUrl ?>" class="list-group-item list-group-item-action py-3 px-3 border-bottom d-flex align-items-start gap-3 text-decoration-none position-relative apple-mail-row">
+                        <div class="list-group-item list-group-item-action py-3 px-3 border-bottom d-flex align-items-start gap-3 position-relative apple-mail-row" style="cursor: pointer;" onclick="if (!event.target.closest('.no-row-click')) { window.location.href='<?= Html::encode($viewUrl) ?>'; }">
                             <!-- Blue Dot (Unread: แสดงจุดสีฟ้า / Read: ซ่อนแบบโปร่งใสเพื่อรักษาตำแหน่ง) -->
                             <div class="pt-2 flex-shrink-0 d-flex align-items-center justify-content-center" style="width: 14px;">
                                 <span class="apple-blue-dot <?= $isRead ? 'opacity-0' : '' ?>" title="<?= $isRead ? 'เปิดอ่านแล้ว' : 'ยังไม่ได้เปิดอ่าน' ?>"></span>
@@ -313,8 +313,8 @@ $pagination = $dataProvider->getPagination();
                                     <div class="d-flex align-items-center gap-2 flex-shrink-0">
                                         <?php if ($canViewStatus): ?>
                                             <?php
-                                            $docStatusLabel = Document::statusOptions()[$doc->status] ?? $doc->status;
-                                            $docStatusClass = 'status-badge-' . str_replace('_', '-', $doc->status);
+                                             $docStatusLabel = Document::statusOptions()[$doc->status] ?? $doc->status;
+                                             $docStatusClass = 'status-badge-' . str_replace('_', '-', $doc->status);
                                             ?>
                                             <span class="status-badge <?= Html::encode($docStatusClass) ?>" style="font-size: 0.72rem; padding: 2px 8px; min-height: 22px; line-height: 1.2;">
                                                 <?= Html::encode($docStatusLabel) ?>
@@ -323,6 +323,16 @@ $pagination = $dataProvider->getPagination();
                                         <div class="apple-mail-date">
                                             <?= $thaiDate($doc->receive_date) ?>
                                         </div>
+                                        <?php if ($identity instanceof User && $identity->canDeleteDocument($doc)): ?>
+                                            <div class="no-row-click ms-1">
+                                                <?= Html::a('<i class="bi bi-trash3 text-danger"></i>', ['delete', 'id' => $doc->id], [
+                                                    'class' => 'btn btn-sm btn-outline-danger py-0 px-2 border-0',
+                                                    'data-confirm' => 'คุณแน่ใจหรือไม่ว่าต้องการลบหนังสือเลขรับ ' . Html::encode($doc->receive_no) . ' เรื่อง "' . Html::encode($doc->subject) . '" นี้? เอกสารและไฟล์แนบทั้งหมดจะถูกลบออกจากระบบอย่างถาวร',
+                                                    'data-method' => 'post',
+                                                    'title' => 'ลบหนังสือฉบับนี้',
+                                                ]) ?>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
 
@@ -350,7 +360,7 @@ $pagination = $dataProvider->getPagination();
                                     <?php endif; ?>
                                 </div>
                             </div>
-                        </a>
+                        </div>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>

@@ -174,6 +174,7 @@ $canEditSummary = $identity instanceof User && (
 );
 $canApproveDocument = $identity instanceof User && ($identity->hasRole(User::ROLE_ADMIN) || ((int) $identity->id === (int) $model->approver_id));
 $canSubmitToApprover = $identity instanceof User && ($identity->hasRole([User::ROLE_ADMIN, User::ROLE_OFFICER]));
+$canDeleteDocument = $identity instanceof User && $identity->canDeleteDocument($model);
 $allUserItems = ArrayHelper::map($allUsers ?? [], 'id', static fn (User $user): string => $user->displayName() . ' (' . $user->roleLabel() . ')');
 $staffItems = ArrayHelper::map($staffUsers, 'id', static fn (User $user): string => $user->displayName());
 $showStampPositionTools = true;
@@ -275,6 +276,14 @@ if ($previewPdfUrl) {
                     <span class="status-badge <?= Html::encode($statusClass) ?>" style="font-size: 0.75rem; padding: 2px 8px; min-height: 24px;">
                         <?= Html::encode($status) ?>
                     </span>
+                    <?php if ($canDeleteDocument): ?>
+                        <?= Html::a('<i class="bi bi-trash3 me-1" aria-hidden="true"></i><span class="d-none d-sm-inline">ลบหนังสือ</span>', ['delete', 'id' => $model->id], [
+                            'class' => 'btn btn-sm btn-outline-danger py-1 px-2 text-nowrap ms-1',
+                            'data-confirm' => 'คุณแน่ใจหรือไม่ว่าต้องการลบหนังสือเลขรับ ' . Html::encode($model->receive_no) . ' เรื่อง "' . Html::encode($model->subject) . '" นี้? เอกสารและไฟล์แนบทั้งหมดจะถูกลบออกจากระบบอย่างถาวร',
+                            'data-method' => 'post',
+                            'title' => 'ลบหนังสือที่ลงรับผิดพลาด',
+                        ]) ?>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -680,6 +689,20 @@ if ($previewPdfUrl) {
 
                 <?php else: ?>
                     <p class="muted-text">ไม่มีรายการที่ต้องดำเนินการสำหรับบทบาทของคุณในสถานะนี้</p>
+                <?php endif; ?>
+
+                <?php if ($canDeleteDocument): ?>
+                    <div class="mt-4 pt-3 border-top">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="small text-danger fw-semibold"><i class="bi bi-trash3 me-1"></i>จัดการหนังสือที่ลงรับผิดพลาด</span>
+                        </div>
+                        <p class="small text-muted mb-2">หากลงรับหนังสือผิดพลาด (เช่น เลขรับซ้ำ, อัปโหลดเอกสารผิดฉบับ) เจ้าหน้าที่ธุรการสามารถลบรายการนี้ออกจากระบบได้</p>
+                        <?= Html::a('<i class="bi bi-trash3 me-1" aria-hidden="true"></i><span>ลบหนังสือฉบับนี้</span>', ['delete', 'id' => $model->id], [
+                            'class' => 'btn btn-outline-danger btn-sm w-100',
+                            'data-confirm' => 'คุณแน่ใจหรือไม่ว่าต้องการลบหนังสือเลขรับ ' . Html::encode($model->receive_no) . ' เรื่อง "' . Html::encode($model->subject) . '" นี้? เอกสารและไฟล์แนบทั้งหมดจะถูกลบออกจากระบบอย่างถาวร ไม่สามารถกู้คืนได้',
+                            'data-method' => 'post',
+                        ]) ?>
+                    </div>
                 <?php endif; ?>
             </section>
 

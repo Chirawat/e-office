@@ -23,6 +23,7 @@ use yii\data\ActiveDataProvider;
 use yii\db\Expression;
 use yii\filters\AccessControl;
 use yii\filters\VerbFilter;
+use yii\helpers\FileHelper;
 use yii\web\Controller;
 use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
@@ -45,6 +46,7 @@ class DocumentController extends Controller
             'verbs' => [
                 'class' => VerbFilter::class,
                 'actions' => [
+                    'delete' => ['post'],
                     'submit-to-deputy' => ['post'],
                     'deputy-comment' => ['post'],
                     'director-order' => ['post'],
@@ -428,6 +430,54 @@ class DocumentController extends Controller
                 ->all(),
             'previewImagePath' => $this->previewImagePath($model),
         ]);
+    }
+
+    /**
+     * ลบหนังสือที่ลงรับแล้ว (สำหรับเจ้าหน้าที่ธุรการกรณีลงรับผิดพลาด หรือผู้ดูแลระบบ)
+     */
+    public function actionDelete(int $id): Response
+    {
+        $model = $this->findModel($id);
+        $identity = Yii::$app->user->identity;
+
+        if (!$identity instanceof User || !$identity->canDeleteDocument($model)) {
+            throw new ForbiddenHttpException('ท่านไม่มีสิทธิ์ลบหนังสือฉบับนี้');
+        }
+
+        $receiveNo = (string) $model->receive_no;
+        $subject = (string) $model->subject;
+        $year = date('Y', strtotime($model->receive_date));
+        $uploadDir = Yii::getAlias('@backend/web/uploads/documents/' . $year . '/' . $model->id);
+
+        $transaction = Yii::$app->db->beginTransaction();
+        try {
+            // บันทึก Audit Log ก่อนลบ
+            (new AuditLog([
+                'document_id' => $model->id,
+                'user_id' => $identity->id,
+                'event' => 'document.deleted',
+                'detail' => sprintf('ลบหนังสือเลขรับ %s เรื่อง "%s" ที่ลงรับผิดพลาด (ผู้ลบ: %s)', $receiveNo, $subject, $identity->displayName()),
+                'ip_address' => Yii::$app->request->userIP,
+                'created_at' => time(),
+            ]))->save(false);
+
+            // ลบข้อมูลเอกสาร (ตารางลูกที่มี Foreign Key CASCADE จะถูกลบอัตโนมัติ)
+            $model->delete();
+
+            // ลบไฟล์เอกสารในโฟลเดอร์ uploads ของหนังสือนั้น
+            if (is_dir($uploadDir)) {
+                FileHelper::removeDirectory($uploadDir);
+            }
+
+            $transaction->commit();
+            Yii::$app->session->setFlash('success', "ลบหนังสือเลขรับ {$receiveNo} เรียบร้อยแล้ว");
+        } catch (\Throwable $e) {
+            $transaction->rollBack();
+            Yii::error('Failed to delete document id=' . $id . ': ' . $e->getMessage(), __METHOD__);
+            Yii::$app->session->setFlash('error', 'ไม่สามารถลบหนังสือได้: ' . $e->getMessage());
+        }
+
+        return $this->redirect(['index']);
     }
 
     public function actionSubmitToApprover(int $id): Response
