@@ -25,6 +25,7 @@ use yii\web\IdentityInterface;
  * @property string $email
  * @property string $role
  * @property int|null $department_id
+ * @property string|null $learning_area
  * @property string|null $signature_path
  * @property string|null $line_user_id
  * @property string|null $line_display_name
@@ -80,6 +81,7 @@ class User extends ActiveRecord implements IdentityInterface
             ['department_id', 'integer'],
             ['department_id', 'exist', 'targetClass' => Department::class, 'targetAttribute' => ['department_id' => 'id']],
             [['fullname'], 'string', 'max' => 150],
+            [['learning_area'], 'string', 'max' => 150],
             [['phone'], 'string', 'max' => 30],
             [['id_card'], 'string', 'max' => 20],
             ['signature_path', 'string', 'max' => 500],
@@ -99,6 +101,7 @@ class User extends ActiveRecord implements IdentityInterface
             'id_card' => 'เลขประจำตัวประชาชน',
             'role' => 'บทบาทผู้ใช้',
             'department_id' => 'กลุ่มงาน',
+            'learning_area' => 'กลุ่มสาระการเรียนรู้',
             'signature_path' => 'ไฟล์ลายเซ็น',
             'line_user_id' => 'LINE userId',
             'line_display_name' => 'ชื่อ LINE',
@@ -132,6 +135,30 @@ class User extends ActiveRecord implements IdentityInterface
             self::ROLE_STAFF => 'หัวหน้ากลุ่มงาน',
             self::ROLE_GENERAL_USER => 'ผู้ใช้ทั่วไป',
         ];
+    }
+
+    public static function learningAreaOptions(): array
+    {
+        return [
+            'กลุ่มสาระการเรียนรู้ภาษาไทย' => 'กลุ่มสาระการเรียนรู้ภาษาไทย',
+            'กลุ่มสาระการเรียนรู้คณิตศาสตร์' => 'กลุ่มสาระการเรียนรู้คณิตศาสตร์',
+            'กลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี' => 'กลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี',
+            'กลุ่มสาระการเรียนรู้สังคมศึกษา ศาสนา และวัฒนธรรม' => 'กลุ่มสาระการเรียนรู้สังคมศึกษา ศาสนา และวัฒนธรรม',
+            'กลุ่มสาระการเรียนรู้สุขศึกษาและพลศึกษา' => 'กลุ่มสาระการเรียนรู้สุขศึกษาและพลศึกษา',
+            'กลุ่มสาระการเรียนรู้ศิลปะ' => 'กลุ่มสาระการเรียนรู้ศิลปะ',
+            'กลุ่มสาระการเรียนรู้การงานอาชีพ' => 'กลุ่มสาระการเรียนรู้การงานอาชีพ',
+            'กลุ่มสาระการเรียนรู้ภาษาต่างประเทศ' => 'กลุ่มสาระการเรียนรู้ภาษาต่างประเทศ',
+            'กิจกรรมพัฒนาผู้เรียน' => 'กิจกรรมพัฒนาผู้เรียน',
+            'ไม่สังกัดกลุ่มสาระ (ผู้บริหาร/บุคลากร)' => 'ไม่สังกัดกลุ่มสาระ (ผู้บริหาร / บุคลากร)',
+        ];
+    }
+
+    public function learningAreaShort(): string
+    {
+        if (empty($this->learning_area)) {
+            return '-';
+        }
+        return str_replace('กลุ่มสาระการเรียนรู้', 'กลุ่มสาระฯ ', $this->learning_area);
     }
 
     public function departmentIds(): array

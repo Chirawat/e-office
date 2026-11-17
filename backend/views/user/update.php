@@ -59,6 +59,10 @@ $departmentItems = ArrayHelper::map($departments, 'id', 'name');
                     'prompt' => '-- เลือกกลุ่มงานที่กำกับดูแล / สังกัด --',
                 ])->label('กลุ่มงานที่กำกับดูแล / สังกัดหลัก')->hint('จำเป็นสำหรับ รอง ผอ. และหัวหน้ากลุ่มงาน เพื่อกำหนดสายการบังคับบัญชาในการตรวจ/สั่งการเอกสาร') ?>
 
+                <?= $form->field($model, 'learning_area')->dropDownList(User::learningAreaOptions(), [
+                    'prompt' => '-- เลือกกลุ่มสาระการเรียนรู้ --',
+                ])->label('กลุ่มสาระการเรียนรู้')->hint('สำหรับคุณครูผู้สอน (ผู้บริหาร หรือ เจ้าหน้าที่ ให้เลือก "ไม่สังกัดกลุ่มสาระ")') ?>
+
                 <?= $form->field($model, 'department_ids')->checkboxList($departmentItems, [
                     'itemOptions' => ['class' => 'form-check-input'],
                 ])->label('กลุ่มงานที่สังกัด / กำกับดูแลเพิ่มเติม')->hint('สำหรับครูผู้สอน/ผู้ใช้ทั่วไป หรือ รอง ผอ. ที่ดูแลมากกว่า 1 กลุ่มงาน') ?>

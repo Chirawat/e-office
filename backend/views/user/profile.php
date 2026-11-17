@@ -52,11 +52,14 @@ $signatureUrl = $user->signature_path ? Url::to('@web/' . ltrim($user->signature
                             <?= $user->status === User::STATUS_ACTIVE ? 'เปิดใช้งาน' : 'รออนุมัติ' ?>
                         </span>
                     </div>
-                    <?php if ($user->department): ?>
-                        <div class="mt-3 pt-3 border-top small text-muted">
-                            <i class="bi bi-building me-1"></i>สังกัด: <strong><?= Html::encode($user->department->name) ?></strong>
-                        </div>
-                    <?php endif; ?>
+                    <div class="mt-3 pt-3 border-top small text-muted text-start">
+                        <?php if ($user->department): ?>
+                            <div class="mb-1"><i class="bi bi-building me-1 text-primary"></i>กลุ่มงาน: <strong><?= Html::encode($user->department->name) ?></strong></div>
+                        <?php endif; ?>
+                        <?php if ($user->learning_area): ?>
+                            <div><i class="bi bi-book me-1 text-info"></i>กลุ่มสาระฯ: <strong><?= Html::encode($user->learning_area) ?></strong></div>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
 
@@ -177,8 +180,13 @@ $signatureUrl = $user->signature_path ? Url::to('@web/' . ltrim($user->signature
                             </div>
                             <div class="col-md-6">
                                 <?= $form->field($model, 'department_id')->dropDownList($departmentItems, [
-                                    'prompt' => '-- เลือกกลุ่มสาระฯ / ฝ่ายงาน --',
-                                ]) ?>
+                                    'prompt' => '-- เลือกกลุ่มงาน / ฝ่ายบริหาร --',
+                                ])->label('กลุ่มงาน / ฝ่ายบริหาร') ?>
+                            </div>
+                            <div class="col-md-6">
+                                <?= $form->field($model, 'learning_area')->dropDownList(User::learningAreaOptions(), [
+                                    'prompt' => '-- เลือกกลุ่มสาระการเรียนรู้ --',
+                                ])->label('กลุ่มสาระการเรียนรู้') ?>
                             </div>
                         </div>
                     </div>

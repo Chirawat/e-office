@@ -8,6 +8,7 @@ declare(strict_types=1);
 /** @var \common\models\Department[] $departments */
 /** @var array|null $lineData */
 
+use common\models\User;
 use yii\bootstrap5\ActiveForm;
 use yii\bootstrap5\Html;
 use yii\helpers\ArrayHelper;
@@ -160,17 +161,6 @@ $hasLineLinked = !empty($model->line_user_id);
                     </div>
 
                     <div class="col-md-6">
-                        <?= $form->field($model, 'department_id', [
-                            'template' => sprintf($htmlIcon, 'bi-building'),
-                            'inputOptions' => [
-                                'class' => 'form-select',
-                            ],
-                        ])->dropDownList($deptOptions, [
-                            'prompt' => '-- เลือกกลุ่มสาระฯ / ฝ่ายงาน --',
-                        ])->label('กลุ่มสาระฯ / ฝ่ายที่สังกัด', $labelOptions) ?>
-                    </div>
-
-                    <div class="col-12">
                         <?= $form->field($model, 'email', [
                             'template' => sprintf($htmlIcon, 'bi-envelope'),
                             'inputOptions' => [
@@ -178,6 +168,28 @@ $hasLineLinked = !empty($model->line_user_id);
                                 'placeholder' => 'เช่น teacher@kudchum.ac.th',
                             ],
                         ])->textInput()->label('อีเมล', $labelOptions) ?>
+                    </div>
+
+                    <div class="col-md-6">
+                        <?= $form->field($model, 'department_id', [
+                            'template' => sprintf($htmlIcon, 'bi-building'),
+                            'inputOptions' => [
+                                'class' => 'form-select',
+                            ],
+                        ])->dropDownList($deptOptions, [
+                            'prompt' => '-- เลือกกลุ่มงานที่สังกัด --',
+                        ])->label('กลุ่มงาน / ฝ่ายบริหาร', $labelOptions)->hint('สำหรับ ผอ./รอง ผอ. ให้เลือก "ผู้บริหารสถานศึกษา"') ?>
+                    </div>
+
+                    <div class="col-md-6">
+                        <?= $form->field($model, 'learning_area', [
+                            'template' => sprintf($htmlIcon, 'bi-book'),
+                            'inputOptions' => [
+                                'class' => 'form-select',
+                            ],
+                        ])->dropDownList(User::learningAreaOptions(), [
+                            'prompt' => '-- เลือกกลุ่มสาระการเรียนรู้ --',
+                        ])->label('กลุ่มสาระการเรียนรู้', $labelOptions)->hint('ครูเลือกกลุ่มสาระฯ ที่สอน (ผู้บริหาร/บุคลากร เลือก "ไม่สังกัดกลุ่มสาระ")') ?>
                     </div>
 
                     <div class="col-md-6">

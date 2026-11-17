@@ -20,6 +20,7 @@ class UserUpdateForm extends Model
     public string $password = '';
     public string $role = User::ROLE_OFFICER;
     public int|string|null $department_id = null;
+    public ?string $learning_area = null;
     public array $department_ids = [];
     public int $status = User::STATUS_ACTIVE;
     public ?UploadedFile $signatureFile = null;
@@ -33,6 +34,7 @@ class UserUpdateForm extends Model
         $this->email = $user->email;
         $this->role = $user->role;
         $this->department_id = $user->department_id !== null ? (int) $user->department_id : null;
+        $this->learning_area = (string) ($user->learning_area ?? '');
         $this->department_ids = $user->departmentIds();
         $this->status = (int) $user->status;
 
@@ -43,7 +45,7 @@ class UserUpdateForm extends Model
     {
         return [
             [['username', 'email', 'role', 'status'], 'required'],
-            [['username', 'email', 'password'], 'trim'],
+            [['username', 'email', 'password', 'learning_area'], 'trim'],
             ['username', 'string', 'min' => 2, 'max' => 255],
             ['username', UniqueValidator::class, 'targetClass' => User::class, 'filter' => ['not', ['id' => $this->user->id]], 'message' => 'Username นี้ถูกใช้แล้ว'],
             ['email', 'email'],
@@ -51,6 +53,7 @@ class UserUpdateForm extends Model
             ['email', UniqueValidator::class, 'targetClass' => User::class, 'filter' => ['not', ['id' => $this->user->id]], 'message' => 'Email นี้ถูกใช้แล้ว'],
             ['password', 'string', 'min' => 6, 'max' => 128],
             ['role', 'in', 'range' => array_keys(User::roleOptions())],
+            ['learning_area', 'string', 'max' => 150],
             ['department_id', 'required', 'when' => function ($model) {
                 return in_array($model->role, [User::ROLE_DEPUTY_DIRECTOR, User::ROLE_STAFF], true);
             }, 'whenClient' => "function (attribute, value) {
@@ -96,6 +99,7 @@ class UserUpdateForm extends Model
             'password' => 'Password ใหม่',
             'role' => 'บทบาทผู้ใช้',
             'department_id' => 'กลุ่มงาน',
+            'learning_area' => 'กลุ่มสาระการเรียนรู้',
             'department_ids' => 'สังกัดกลุ่มงาน',
             'status' => 'สถานะ',
             'signatureFile' => 'ไฟล์ลายเซ็น',
@@ -120,7 +124,8 @@ class UserUpdateForm extends Model
         $this->user->username = $this->username;
         $this->user->email = $this->email;
         $this->user->role = $this->role;
-        $this->user->department_id = $this->role === User::ROLE_STAFF && $this->department_id !== null ? (int) $this->department_id : null;
+        $this->user->department_id = $this->department_id !== null && $this->department_id !== '' ? (int) $this->department_id : null;
+        $this->user->learning_area = $this->learning_area !== '' ? $this->learning_area : null;
         $this->user->status = $this->status;
 
         if ($this->password !== '') {

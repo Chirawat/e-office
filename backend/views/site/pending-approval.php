@@ -15,6 +15,7 @@ $this->registerCssFile('https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font
 
 $name = $user !== null ? $user->displayName() : 'คุณครู';
 $dept = $user?->department?->name ?? 'ทั่วไป';
+$learningArea = $user?->learning_area ?: 'ไม่ระบุ';
 ?>
 
 <div class="card border-0 shadow-sm rounded-4 overflow-hidden my-auto my-md-4" style="max-width: 580px; width: 100%;">
@@ -40,10 +41,14 @@ $dept = $user?->department?->name ?? 'ทั่วไป';
 
                 <div class="row g-2">
                     <div class="col-sm-6">
-                        <div class="small text-muted">กลุ่มสาระฯ / ฝ่าย</div>
+                        <div class="small text-muted">กลุ่มงาน / ฝ่ายบริหาร</div>
                         <div class="fw-semibold text-dark"><?= Html::encode($dept) ?></div>
                     </div>
                     <div class="col-sm-6">
+                        <div class="small text-muted">กลุ่มสาระการเรียนรู้</div>
+                        <div class="fw-semibold text-dark"><?= Html::encode($learningArea) ?></div>
+                    </div>
+                    <div class="col-12 mt-2">
                         <div class="small text-muted">สถานะบัญชี</div>
                         <div><span class="badge bg-warning-subtle text-warning-emphasis border border-warning px-2 py-1"><i class="bi bi-clock me-1"></i>รอ Admin ยืนยันข้อมูล</span></div>
                     </div>

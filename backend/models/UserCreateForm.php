@@ -19,6 +19,7 @@ class UserCreateForm extends Model
     public string $password = '';
     public string $role = User::ROLE_OFFICER;
     public int|string|null $department_id = null;
+    public ?string $learning_area = null;
     public array $department_ids = [];
     public int $status = User::STATUS_ACTIVE;
     public ?UploadedFile $signatureFile = null;
@@ -27,7 +28,7 @@ class UserCreateForm extends Model
     {
         return [
             [['username', 'email', 'password', 'role', 'status'], 'required'],
-            [['username', 'email'], 'trim'],
+            [['username', 'email', 'learning_area'], 'trim'],
             ['username', 'string', 'min' => 2, 'max' => 255],
             ['username', 'unique', 'targetClass' => User::class, 'message' => 'Username นี้ถูกใช้แล้ว'],
             ['email', 'email'],
@@ -35,6 +36,7 @@ class UserCreateForm extends Model
             ['email', 'unique', 'targetClass' => User::class, 'message' => 'Email นี้ถูกใช้แล้ว'],
             ['password', 'string', 'min' => 6, 'max' => 128],
             ['role', 'in', 'range' => array_keys(User::roleOptions())],
+            ['learning_area', 'string', 'max' => 150],
             ['department_id', 'required', 'when' => function ($model) {
                 return in_array($model->role, [User::ROLE_DEPUTY_DIRECTOR, User::ROLE_STAFF], true);
             }, 'whenClient' => "function (attribute, value) {
@@ -80,6 +82,7 @@ class UserCreateForm extends Model
             'password' => 'Password',
             'role' => 'บทบาทผู้ใช้',
             'department_id' => 'กลุ่มงาน',
+            'learning_area' => 'กลุ่มสาระการเรียนรู้',
             'department_ids' => 'สังกัดกลุ่มงาน',
             'status' => 'สถานะ',
             'signatureFile' => 'ไฟล์ลายเซ็น',
@@ -100,12 +103,13 @@ class UserCreateForm extends Model
             return null;
         }
 
-        $departmentId = $this->role === User::ROLE_STAFF && $this->department_id !== null ? (int) $this->department_id : null;
+        $departmentId = $this->department_id !== null && $this->department_id !== '' ? (int) $this->department_id : null;
         $user = new User([
             'username' => $this->username,
             'email' => $this->email,
             'role' => $this->role,
             'department_id' => $departmentId,
+            'learning_area' => $this->learning_area !== '' ? $this->learning_area : null,
             'status' => $this->status,
         ]);
         $user->setPassword($this->password);

@@ -418,6 +418,7 @@
     `email` varchar(255) NOT NULL,
     `role` varchar(40) NOT NULL DEFAULT 'officer',
     `department_id` int(11) DEFAULT NULL,
+    `learning_area` varchar(150) DEFAULT NULL,
     `signature_path` varchar(500) DEFAULT NULL,
     `line_user_id` varchar(80) DEFAULT NULL,
     `line_display_name` varchar(120) DEFAULT NULL,
@@ -436,6 +437,7 @@
     UNIQUE KEY `idx-user-line_link_token` (`line_link_token`),
     KEY `idx-user-role` (`role`),
     KEY `idx-user-department_id` (`department_id`),
+    KEY `idx-user-learning_area` (`learning_area`),
     KEY `idx-user-id_card` (`id_card`),
     KEY `idx-user-phone` (`phone`),
     CONSTRAINT `fk-user-department_id` FOREIGN KEY (`department_id`) REFERENCES `department` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
@@ -516,7 +518,7 @@
 
   LOCK TABLES `department` WRITE;
   /*!40000 ALTER TABLE `department` DISABLE KEYS */;
-  INSERT INTO `department` VALUES (1,'วิชาการ','academic',1,10,1781843964,1784016050),(2,'บุคคล','personnel',1,20,1781843964,1784016050),(3,'งบประมาณ','budget',1,30,1781843964,1784016050),(4,'บริหารทั่วไป','general',1,40,1781843964,1784016050),(5,'กิจการนักเรียน','student_affairs',1,50,1781843964,1784016050);
+  INSERT INTO `department` VALUES (1,'วิชาการ','academic',1,10,1781843964,1784016050),(2,'บุคคล','personnel',1,20,1781843964,1784016050),(3,'งบประมาณ','budget',1,30,1781843964,1784016050),(4,'บริหารทั่วไป','general',1,40,1781843964,1784016050),(5,'กิจการนักเรียน','student_affairs',1,50,1781843964,1784016050),(6,'ผู้บริหารสถานศึกษา','management',1,5,1781843964,1784016050);
   /*!40000 ALTER TABLE `department` ENABLE KEYS */;
   UNLOCK TABLES;
 

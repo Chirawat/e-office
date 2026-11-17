@@ -175,23 +175,28 @@ $currentUserId = (int) Yii::$app->user->id;
                 ],
                 [
                     'attribute' => 'department_id',
-                    'label' => 'กลุ่มงาน/ฝ่าย',
+                    'label' => 'กลุ่มงาน / สาระฯ',
                     'format' => 'raw',
                     'value' => static function (User $model): string {
+                        $deptHtml = '';
                         if ($model->role === User::ROLE_DEPUTY_DIRECTOR) {
                             $deptName = $model->department->name ?? '-';
-                            return '<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1"><i class="bi bi-shield-check me-1"></i>กำกับดูแล: ' . Html::encode($deptName) . '</span>';
-                        }
-                        if ($model->role === User::ROLE_STAFF) {
+                            $deptHtml = '<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1"><i class="bi bi-shield-check me-1"></i>กำกับดูแล: ' . Html::encode($deptName) . '</span>';
+                        } elseif ($model->role === User::ROLE_STAFF) {
                             $deptName = $model->department->name ?? '-';
-                            return '<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1"><i class="bi bi-person-badge me-1"></i>หัวหน้า: ' . Html::encode($deptName) . '</span>';
-                        }
-                        if ($model->role === User::ROLE_GENERAL_USER) {
+                            $deptHtml = '<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1"><i class="bi bi-person-badge me-1"></i>หัวหน้า: ' . Html::encode($deptName) . '</span>';
+                        } elseif ($model->role === User::ROLE_GENERAL_USER) {
                             $names = array_map(static fn ($department): string => $department->name, $model->departments);
-                            return $names !== [] ? implode(', ', $names) : ($model->department->name ?? '-');
+                            $deptHtml = $names !== [] ? Html::encode(implode(', ', $names)) : Html::encode($model->department->name ?? '-');
+                        } else {
+                            $deptHtml = Html::encode($model->department->name ?? '-');
                         }
 
-                        return $model->department->name ?? '-';
+                        if (!empty($model->learning_area)) {
+                            $deptHtml .= '<div class="small text-muted mt-1"><i class="bi bi-book text-secondary me-1"></i>' . Html::encode($model->learningAreaShort()) . '</div>';
+                        }
+
+                        return $deptHtml;
                     },
                 ],
                 [

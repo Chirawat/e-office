@@ -21,6 +21,7 @@ class UserProfileForm extends Model
     public string $phone = '';
     public string $id_card = '';
     public int|string|null $department_id = null;
+    public ?string $learning_area = null;
     public string $password = '';
     public string $password_repeat = '';
     public ?UploadedFile $signatureFile = null;
@@ -36,6 +37,7 @@ class UserProfileForm extends Model
         $this->phone = (string) ($user->phone ?? '');
         $this->id_card = (string) ($user->id_card ?? '');
         $this->department_id = $user->department_id !== null ? (int) $user->department_id : null;
+        $this->learning_area = (string) ($user->learning_area ?? '');
 
         parent::__construct($config);
     }
@@ -44,7 +46,7 @@ class UserProfileForm extends Model
     {
         return [
             [['fullname', 'username', 'email'], 'required'],
-            [['fullname', 'username', 'email', 'phone', 'id_card', 'password', 'password_repeat'], 'trim'],
+            [['fullname', 'username', 'email', 'phone', 'id_card', 'learning_area', 'password', 'password_repeat'], 'trim'],
             ['fullname', 'string', 'min' => 2, 'max' => 150],
             ['username', 'string', 'min' => 3, 'max' => 64],
             ['username', UniqueValidator::class, 'targetClass' => User::class, 'filter' => ['not', ['id' => $this->user->id]], 'message' => 'ชื่อผู้ใช้นี้ถูกใช้งานแล้ว'],
@@ -55,6 +57,7 @@ class UserProfileForm extends Model
             ['id_card', 'string', 'max' => 20],
             ['department_id', 'integer'],
             ['department_id', 'exist', 'targetClass' => Department::class, 'targetAttribute' => ['department_id' => 'id']],
+            ['learning_area', 'string', 'max' => 150],
             ['password', 'string', 'min' => 6, 'max' => 64],
             ['password_repeat', 'compare', 'compareAttribute' => 'password', 'skipOnEmpty' => true, 'message' => 'รหัสผ่านยืนยันไม่ตรงกับรหัสผ่านใหม่'],
             ['signatureFile', 'file', 'skipOnEmpty' => true, 'extensions' => ['png', 'jpg', 'jpeg'], 'maxSize' => 2 * 1024 * 1024],
@@ -69,7 +72,8 @@ class UserProfileForm extends Model
             'email' => 'อีเมล (Email)',
             'phone' => 'เบอร์โทรศัพท์มือถือ',
             'id_card' => 'เลขประจำตัวประชาชน 13 หลัก',
-            'department_id' => 'กลุ่มสาระฯ / ฝ่ายงานที่สังกัด',
+            'department_id' => 'กลุ่มงาน / ฝ่ายบริหาร',
+            'learning_area' => 'กลุ่มสาระการเรียนรู้',
             'password' => 'รหัสผ่านใหม่ (เว้นว่างไว้หากไม่ต้องการเปลี่ยน)',
             'password_repeat' => 'ยืนยันรหัสผ่านใหม่อีกครั้ง',
             'signatureFile' => 'ไฟล์ภาพลายเซ็นสแกน (PNG หรือ JPG)',
@@ -102,6 +106,7 @@ class UserProfileForm extends Model
         $this->user->email = $this->email;
         $this->user->phone = $this->phone;
         $this->user->id_card = $this->id_card !== '' ? $this->id_card : null;
+        $this->user->learning_area = $this->learning_area !== '' ? $this->learning_area : null;
         if ($this->department_id !== null && $this->department_id !== '') {
             $this->user->department_id = (int) $this->department_id;
         }
