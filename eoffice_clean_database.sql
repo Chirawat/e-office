@@ -518,7 +518,7 @@
 
   LOCK TABLES `department` WRITE;
   /*!40000 ALTER TABLE `department` DISABLE KEYS */;
-  INSERT INTO `department` VALUES (1,'วิชาการ','academic',1,10,1781843964,1784016050),(2,'บุคคล','personnel',1,20,1781843964,1784016050),(3,'งบประมาณ','budget',1,30,1781843964,1784016050),(4,'บริหารทั่วไป','general',1,40,1781843964,1784016050),(5,'กิจการนักเรียน','student_affairs',1,50,1781843964,1784016050),(6,'ผู้บริหารสถานศึกษา','management',1,5,1781843964,1784016050);
+  INSERT INTO `department` VALUES (1,'วิชาการ','academic',1,10,1781843964,1784016050),(2,'บุคคล','personnel',1,20,1781843964,1784016050),(3,'งบประมาณ','budget',1,30,1781843964,1784016050),(4,'บริหารทั่วไป','general',1,40,1781843964,1784016050),(5,'กิจการนักเรียน','student_affairs',1,50,1781843964,1784016050);
   /*!40000 ALTER TABLE `department` ENABLE KEYS */;
   UNLOCK TABLES;
 

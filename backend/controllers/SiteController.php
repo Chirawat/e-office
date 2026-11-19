@@ -311,6 +311,8 @@ class SiteController extends Controller
 
         $departments = Department::find()
             ->where(['is_active' => true])
+            ->andWhere(['not in', 'code', ['management', 'executive']])
+            ->andWhere(['!=', 'name', 'ผู้บริหารสถานศึกษา'])
             ->orderBy(['sort_order' => SORT_ASC, 'id' => SORT_ASC])
             ->all();
 

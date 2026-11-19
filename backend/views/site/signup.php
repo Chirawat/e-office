@@ -28,7 +28,7 @@ $labelOptions = ['class' => 'form-label fw-semibold'];
 $hasLineLinked = !empty($model->line_user_id);
 ?>
 
-<div class="card border-0 overflow-hidden login-split-card eoffice-login-card my-auto my-md-4" style="max-width: 960px; width: 100%;">
+<div class="card border-0 overflow-hidden login-split-card eoffice-login-card my-auto my-md-4" style="max-width: 980px; width: 100%;">
     <div class="row g-0">
 
         <!-- ฝั่งซ้าย: Theme Brand Panel -->
@@ -82,134 +82,172 @@ $hasLineLinked = !empty($model->line_user_id);
                         </div>
                     </div>
                     <h1 class="h3 fw-bold text-dark mb-1">ลงทะเบียนผู้ใช้งานใหม่</h1>
-                    <p class="text-body-secondary small mb-0">กรอกข้อมูลและเชื่อมต่อ LINE เพื่อรับการแจ้งเตือนเอกสาร</p>
-                </div>
-
-                <!-- ส่วนบังคับผูกกับ LINE (LINE Required Step) -->
-                <div class="card border mb-4 p-3 rounded-3 <?= $hasLineLinked ? 'bg-success-subtle border-success' : 'bg-light border-warning' ?>">
-                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="d-flex align-items-center justify-content-center rounded-circle" style="width: 44px; height: 44px; background: #06C755; color: #fff; font-size: 22px;">
-                                <i class="bi bi-line"></i>
-                            </div>
-                            <div>
-                                <strong class="d-block text-dark">
-                                    <?= $hasLineLinked ? 'เชื่อมต่อ LINE สำเร็จแล้ว' : 'ขั้นตอนที่ 1: บังคับเชื่อมต่อ LINE' ?>
-                                </strong>
-                                <span class="small text-secondary">
-                                    <?= $hasLineLinked 
-                                        ? 'บัญชี: ' . Html::encode($model->line_display_name ?: 'LINE User') . ' (ใช้รับแจ้งเตือนเอกสารและการอนุมัติ)'
-                                        : 'ระบบจำเป็นต้องใช้ LINE ในการแจ้งผลอนุมัติและเตือนงานสารบรรณ' ?>
-                                </span>
-                            </div>
-                        </div>
-
-                        <?php if ($hasLineLinked): ?>
-                            <span class="badge bg-success px-3 py-2"><i class="bi bi-check-circle-fill me-1"></i> เชื่อมต่อแล้ว</span>
-                        <?php else: ?>
-                            <a href="<?= Url::to(['/site/line-auth', 'from' => 'signup']) ?>" class="btn text-white fw-bold px-3 py-2 rounded-3 shadow-sm" style="background-color: #06C755; border: none;">
-                                <i class="bi bi-link-45deg me-1"></i> กดเชื่อมต่อ LINE ที่นี่
-                            </a>
-                        <?php endif; ?>
-                    </div>
+                    <p class="text-body-secondary small mb-0">กรอกข้อมูลและเชื่อมต่อ LINE เพื่อรับการแจ้งเตือนเอกสารราชการ</p>
                 </div>
 
                 <?php $form = ActiveForm::begin([
                     'id' => 'form-signup',
                 ]); ?>
 
-                <!-- Hidden inputs สำหรับเก็บ line_user_id และ line_display_name -->
-                <?= Html::activeHiddenInput($model, 'line_user_id') ?>
-                <?= Html::activeHiddenInput($model, 'line_display_name') ?>
-
-                <?php if ($model->hasErrors('line_user_id')): ?>
-                    <div class="alert alert-danger py-2 px-3 small mb-3">
-                        <i class="bi bi-exclamation-triangle-fill me-1"></i> <?= Html::encode($model->getFirstError('line_user_id')) ?>
-                    </div>
-                <?php endif; ?>
-
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <?= $form->field($model, 'fullname', [
-                            'template' => sprintf($htmlIcon, 'bi-person-badge'),
-                            'inputOptions' => [
-                                'class' => 'form-control',
-                                'placeholder' => 'เช่น นายสมชาย ใจดี',
-                                'autofocus' => true,
-                            ],
-                        ])->textInput()->label('ชื่อ - นามสกุลจริง (ทางการ)', $labelOptions)->hint('ระบุคำนำหน้าและชื่อ-นามสกุลจริงสำหรับใช้ในระบบเอกสารราชการ') ?>
+                <!-- ================= 1. เชื่อมต่อ Line ================= -->
+                <div class="mb-4">
+                    <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                        <span class="badge rounded-circle d-inline-flex align-items-center justify-content-center text-white" style="width: 26px; height: 26px; font-size: 0.85rem; background: #06C755;">1</span>
+                        <h6 class="fw-bold mb-0 text-dark">เชื่อมต่อ Line</h6>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle ms-auto" style="font-size: 0.72rem;">ขั้นตอนจำเป็น</span>
                     </div>
 
-                    <div class="col-md-6">
-                        <?= $form->field($model, 'phone', [
-                            'template' => sprintf($htmlIcon, 'bi-telephone'),
-                            'inputOptions' => [
-                                'class' => 'form-control',
-                                'placeholder' => 'เช่น 0812345678',
-                            ],
-                        ])->textInput()->label('เบอร์โทรศัพท์มือถือ', $labelOptions) ?>
+                    <div class="card border p-3 rounded-3 <?= $hasLineLinked ? 'bg-success-subtle border-success' : 'bg-light border-warning' ?>">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0" style="width: 44px; height: 44px; background: #06C755; color: #fff; font-size: 22px;">
+                                    <i class="bi bi-line"></i>
+                                </div>
+                                <div>
+                                    <strong class="d-block text-dark">
+                                        <?= $hasLineLinked ? 'เชื่อมต่อ LINE สำเร็จแล้ว' : 'กดปุ่มเพื่อเชื่อมต่อบัญชี LINE' ?>
+                                    </strong>
+                                    <span class="small text-secondary">
+                                        <?= $hasLineLinked 
+                                            ? 'บัญชี: ' . Html::encode($model->line_display_name ?: 'LINE User') . ' (ใช้รับแจ้งเตือนเอกสารและการอนุมัติ)'
+                                            : 'ระบบจำเป็นต้องใช้ LINE ในการแจ้งผลอนุมัติและเตือนงานสารบรรณ' ?>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <?php if ($hasLineLinked): ?>
+                                <span class="badge bg-success px-3 py-2"><i class="bi bi-check-circle-fill me-1"></i> เชื่อมต่อแล้ว</span>
+                            <?php else: ?>
+                                <a href="<?= Url::to(['/site/line-auth', 'from' => 'signup']) ?>" class="btn text-white fw-bold px-3 py-2 rounded-3 shadow-sm" style="background-color: #06C755; border: none;">
+                                    <i class="bi bi-link-45deg me-1"></i> กดเชื่อมต่อ LINE ที่นี่
+                                </a>
+                            <?php endif; ?>
+                        </div>
                     </div>
 
-                    <div class="col-md-6">
-                        <?= $form->field($model, 'username', [
-                            'template' => sprintf($htmlIcon, 'bi-person'),
-                            'inputOptions' => [
-                                'class' => 'form-control',
-                                'placeholder' => 'เลขบัตร 13 หลัก หรือภาษาอังกฤษ',
-                            ],
-                        ])->textInput()->label('ชื่อผู้ใช้ (Username)', $labelOptions)->hint('แนะนำให้ใช้เลขบัตรประชาชน 13 หลัก เพื่อง่ายต่อการจำ') ?>
+                    <!-- Hidden inputs สำหรับเก็บ line_user_id และ line_display_name -->
+                    <?= Html::activeHiddenInput($model, 'line_user_id') ?>
+                    <?= Html::activeHiddenInput($model, 'line_display_name') ?>
+
+                    <?php if ($model->hasErrors('line_user_id')): ?>
+                        <div class="alert alert-danger py-2 px-3 small mt-2 mb-0">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> <?= Html::encode($model->getFirstError('line_user_id')) ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- ================= 2. ข้อมูลในการเข้าระบบ ================= -->
+                <div class="mb-4">
+                    <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                        <span class="badge rounded-circle d-inline-flex align-items-center justify-content-center text-white bg-primary" style="width: 26px; height: 26px; font-size: 0.85rem;">2</span>
+                        <h6 class="fw-bold mb-0 text-dark">ข้อมูลในการเข้าระบบ</h6>
+                        <span class="text-muted small ms-auto" style="font-size: 0.75rem;">Account Credentials</span>
                     </div>
 
-                    <div class="col-md-6">
-                        <?= $form->field($model, 'email', [
-                            'template' => sprintf($htmlIcon, 'bi-envelope'),
-                            'inputOptions' => [
-                                'class' => 'form-control',
-                                'placeholder' => 'เช่น teacher@kudchum.ac.th',
-                            ],
-                        ])->textInput()->label('อีเมล', $labelOptions) ?>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <?= $form->field($model, 'username', [
+                                'template' => sprintf($htmlIcon, 'bi-person'),
+                                'inputOptions' => [
+                                    'class' => 'form-control',
+                                    'placeholder' => 'เลขบัตร 13 หลัก หรือภาษาอังกฤษ',
+                                ],
+                            ])->textInput()->label('ชื่อผู้ใช้ (Username)', $labelOptions)->hint('แนะนำให้ใช้เลขบัตรประชาชน 13 หลัก เพื่อง่ายต่อการจำ') ?>
+                        </div>
+
+                        <div class="col-md-6">
+                            <?= $form->field($model, 'email', [
+                                'template' => sprintf($htmlIcon, 'bi-envelope'),
+                                'inputOptions' => [
+                                    'class' => 'form-control',
+                                    'placeholder' => 'เช่น teacher@kudchum.ac.th',
+                                ],
+                            ])->textInput()->label('อีเมล (Email)', $labelOptions)->hint('ใช้สำหรับรับข้อมูลข่าวสารและการกู้คืนบัญชี') ?>
+                        </div>
+
+                        <div class="col-md-6">
+                            <?= $form->field($model, 'password', [
+                                'template' => sprintf($htmlIcon, 'bi-lock'),
+                                'inputOptions' => [
+                                    'class' => 'form-control',
+                                    'placeholder' => 'อย่างน้อย 6 ตัวอักษร',
+                                ],
+                            ])->passwordInput()->label('กำหนดรหัสผ่าน', $labelOptions) ?>
+                        </div>
+
+                        <div class="col-md-6">
+                            <?= $form->field($model, 'password_repeat', [
+                                'template' => sprintf($htmlIcon, 'bi-shield-lock'),
+                                'inputOptions' => [
+                                    'class' => 'form-control',
+                                    'placeholder' => 'พิมพ์รหัสผ่านเดิมอีกครั้ง',
+                                ],
+                            ])->passwordInput()->label('ยืนยันรหัสผ่านอีกครั้ง', $labelOptions) ?>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= 3. ข้อมูลตำแหน่งงาน ================= -->
+                <div class="mb-4">
+                    <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                        <span class="badge rounded-circle d-inline-flex align-items-center justify-content-center text-white" style="width: 26px; height: 26px; font-size: 0.85rem; background-color: #4f46e5;">3</span>
+                        <h6 class="fw-bold mb-0 text-dark">ข้อมูลตำแหน่งงาน</h6>
+                        <span class="text-muted small ms-auto" style="font-size: 0.75rem;">Personnel Details</span>
                     </div>
 
-                    <div class="col-md-6">
-                        <?= $form->field($model, 'department_id', [
-                            'template' => sprintf($htmlIcon, 'bi-building'),
-                            'inputOptions' => [
-                                'class' => 'form-select',
-                            ],
-                        ])->dropDownList($deptOptions, [
-                            'prompt' => '-- เลือกกลุ่มงานที่สังกัด --',
-                        ])->label('กลุ่มงาน / ฝ่ายบริหาร', $labelOptions)->hint('สำหรับ ผอ./รอง ผอ. ให้เลือก "ผู้บริหารสถานศึกษา"') ?>
-                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <?= $form->field($model, 'fullname', [
+                                'template' => sprintf($htmlIcon, 'bi-person-badge'),
+                                'inputOptions' => [
+                                    'class' => 'form-control',
+                                    'placeholder' => 'เช่น นายสมชาย ใจดี',
+                                ],
+                            ])->textInput()->label('ชื่อ - นามสกุลจริง (ทางการ)', $labelOptions)->hint('ระบุคำนำหน้าและชื่อ-นามสกุลจริงสำหรับระบบราชการ') ?>
+                        </div>
 
-                    <div class="col-md-6">
-                        <?= $form->field($model, 'learning_area', [
-                            'template' => sprintf($htmlIcon, 'bi-book'),
-                            'inputOptions' => [
-                                'class' => 'form-select',
-                            ],
-                        ])->dropDownList(User::learningAreaOptions(), [
-                            'prompt' => '-- เลือกกลุ่มสาระการเรียนรู้ --',
-                        ])->label('กลุ่มสาระการเรียนรู้', $labelOptions)->hint('ครูเลือกกลุ่มสาระฯ ที่สอน (ผู้บริหาร/บุคลากร เลือก "ไม่สังกัดกลุ่มสาระ")') ?>
-                    </div>
+                        <div class="col-md-6">
+                            <?= $form->field($model, 'phone', [
+                                'template' => sprintf($htmlIcon, 'bi-telephone'),
+                                'inputOptions' => [
+                                    'class' => 'form-control',
+                                    'placeholder' => 'เช่น 0812345678',
+                                ],
+                            ])->textInput()->label('เบอร์โทรศัพท์มือถือ', $labelOptions) ?>
+                        </div>
 
-                    <div class="col-md-6">
-                        <?= $form->field($model, 'password', [
-                            'template' => sprintf($htmlIcon, 'bi-lock'),
-                            'inputOptions' => [
-                                'class' => 'form-control',
-                                'placeholder' => 'อย่างน้อย 6 ตัวอักษร',
-                            ],
-                        ])->passwordInput()->label('กำหนดรหัสผ่าน', $labelOptions) ?>
-                    </div>
+                        <div class="col-md-6">
+                            <?= $form->field($model, 'department_id', [
+                                'template' => sprintf($htmlIcon, 'bi-building'),
+                                'inputOptions' => [
+                                    'class' => 'form-select',
+                                ],
+                            ])->dropDownList($deptOptions, [
+                                'prompt' => '-- เลือกกลุ่มงานที่สังกัด --',
+                            ])->label('กลุ่มงานที่สังกัด (ฝ่ายบริหาร)', $labelOptions)->hint('เลือกฝ่ายงานบริหารที่สังกัด เช่น วิชาการ, บุคคล, ทั่วไป ฯลฯ') ?>
+                        </div>
 
-                    <div class="col-md-6">
-                        <?= $form->field($model, 'password_repeat', [
-                            'template' => sprintf($htmlIcon, 'bi-shield-lock'),
-                            'inputOptions' => [
-                                'class' => 'form-control',
-                                'placeholder' => 'พิมพ์รหัสผ่านเดิมอีกครั้ง',
-                            ],
-                        ])->passwordInput()->label('ยืนยันรหัสผ่าน', $labelOptions) ?>
+                        <div class="col-md-6">
+                            <?= $form->field($model, 'learning_area', [
+                                'template' => sprintf($htmlIcon, 'bi-book'),
+                                'inputOptions' => [
+                                    'class' => 'form-select',
+                                ],
+                            ])->dropDownList(User::learningAreaOptions(), [
+                                'prompt' => '-- เลือกกลุ่มสาระการเรียนรู้ --',
+                            ])->label('กลุ่มสาระการเรียนรู้', $labelOptions)->hint('ครูเลือกกลุ่มสาระฯ ที่สอน (เจ้าหน้าที่/บุคลากร เลือก "ไม่สังกัดกลุ่มสาระ")') ?>
+                        </div>
+
+                        <div class="col-12">
+                            <?= $form->field($model, 'id_card', [
+                                'template' => sprintf($htmlIcon, 'bi-card-heading'),
+                                'inputOptions' => [
+                                    'class' => 'form-control',
+                                    'placeholder' => 'เลขประจำตัวประชาชน 13 หลัก (ถ้ามี)',
+                                    'maxlength' => 20,
+                                ],
+                            ])->textInput()->label('เลขประจำตัวประชาชน (ถ้ามี)', $labelOptions)->hint('สำหรับตรวจสอบยืนยันข้อมูลความถูกต้องในระบบสารบรรณ') ?>
+                        </div>
                     </div>
                 </div>
 
@@ -236,7 +274,7 @@ $hasLineLinked = !empty($model->line_user_id);
                     ) ?>
                     <?= Html::a(
                         '<i class="bi bi-arrow-left me-1"></i><span>มีบัญชีอยู่แล้ว? กลับไปหน้าเข้าสู่ระบบ</span>',
-                        ['login'],
+                        ['/site/login'],
                         ['class' => 'btn btn-outline-secondary rounded-3 text-center py-2']
                     ) ?>
                 </div>
