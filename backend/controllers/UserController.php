@@ -39,6 +39,7 @@ class UserController extends Controller
                 'class' => VerbFilter::class,
                 'actions' => [
                     'update-role' => ['post'],
+                    'update-learning-area' => ['post'],
                     'approve' => ['post'],
                     'reset-password' => ['post'],
                     'delete' => ['post'],
@@ -50,7 +51,7 @@ class UserController extends Controller
         ];
     }
 
-    public function actionIndex(?int $status = null): string
+    public function actionIndex(?int $status = null, ?string $learning_area = null, ?string $q = null, string $view = 'grouped'): string
     {
         $this->requireAdmin();
         $roleOrder = sprintf(
@@ -65,7 +66,8 @@ class UserController extends Controller
         $query = User::find()
             ->with(['department', 'departments'])
             ->orderBy(new Expression($roleOrder))
-            ->addOrderBy(['username' => SORT_ASC, 'id' => SORT_ASC]);
+            ->addOrderBy([new Expression("COALESCE(NULLIF(fullname, ''), username) ASC")])
+            ->addOrderBy(['id' => SORT_ASC]);
 
         if ($status !== null) {
             $query->andWhere(['status' => $status]);
@@ -73,8 +75,72 @@ class UserController extends Controller
             $query->andWhere(['<>', 'status', User::STATUS_DELETED]);
         }
 
+        if ($learning_area !== null && $learning_area !== '') {
+            if ($learning_area === '_unassigned' || $learning_area === 'unassigned') {
+                $query->andWhere(['or', ['learning_area' => null], ['learning_area' => '']]);
+            } else {
+                $query->andWhere(['learning_area' => $learning_area]);
+            }
+        }
+
+        if (!empty($q)) {
+            $qTrimmed = trim($q);
+            $query->andWhere([
+                'or',
+                ['like', 'username', $qTrimmed],
+                ['like', 'fullname', $qTrimmed],
+                ['like', 'phone', $qTrimmed],
+                ['like', 'email', $qTrimmed],
+            ]);
+        }
+
         $pendingCount = (int) User::find()->where(['status' => User::STATUS_INACTIVE])->count();
         $activeCount = (int) User::find()->where(['status' => User::STATUS_ACTIVE])->count();
+        $totalCount = (int) User::find()->where(['<>', 'status', User::STATUS_DELETED])->count();
+
+        // คำนวณสถิติจำนวนสมาชิกตามกลุ่มสาระการเรียนรู้
+        $statsQuery = User::find()
+            ->select(['learning_area', 'status'])
+            ->where(['<>', 'status', User::STATUS_DELETED]);
+        if ($status !== null) {
+            $statsQuery->andWhere(['status' => $status]);
+        }
+        $statsRows = $statsQuery->asArray()->all();
+
+        $learningAreaOptions = User::learningAreaOptions();
+        $countsByArea = [];
+        foreach (array_keys($learningAreaOptions) as $areaKey) {
+            $countsByArea[$areaKey] = 0;
+        }
+        $countsByArea['_unassigned'] = 0;
+
+        foreach ($statsRows as $row) {
+            $area = (string) ($row['learning_area'] ?? '');
+            if ($area !== '' && isset($countsByArea[$area])) {
+                $countsByArea[$area]++;
+            } else {
+                $countsByArea['_unassigned']++;
+            }
+        }
+
+        $allUsers = (clone $query)->all();
+
+        // จำแนกผู้ใช้ตามกลุ่มสาระการเรียนรู้
+        $groupedUsers = [];
+        foreach (array_keys($learningAreaOptions) as $areaKey) {
+            $groupedUsers[$areaKey] = [];
+        }
+        $groupedUsers['_unassigned'] = [];
+
+        foreach ($allUsers as $u) {
+            $area = (string) ($u->learning_area ?? '');
+            if ($area !== '' && isset($groupedUsers[$area])) {
+                $groupedUsers[$area][] = $u;
+            } else {
+                $groupedUsers['_unassigned'][] = $u;
+            }
+        }
+
         $activeUsers = User::find()
             ->where(['status' => User::STATUS_ACTIVE])
             ->orderBy([new Expression("COALESCE(NULLIF(fullname, ''), username) ASC")])
@@ -83,13 +149,40 @@ class UserController extends Controller
         return $this->render('index', [
             'dataProvider' => new ActiveDataProvider([
                 'query' => $query,
-                'pagination' => ['pageSize' => 20],
+                'pagination' => ['pageSize' => 50],
             ]),
+            'allUsers' => $allUsers,
+            'groupedUsers' => $groupedUsers,
+            'countsByArea' => $countsByArea,
+            'learningAreaOptions' => $learningAreaOptions,
             'currentStatus' => $status,
+            'currentArea' => $learning_area,
+            'currentQ' => $q,
+            'currentView' => $view,
             'pendingCount' => $pendingCount,
             'activeCount' => $activeCount,
+            'totalCount' => $totalCount,
             'activeUsers' => $activeUsers,
         ]);
+    }
+
+    public function actionUpdateLearningArea(int $id): Response
+    {
+        $this->requireAdmin();
+        $model = $this->findModel($id);
+        $area = trim((string) Yii::$app->request->post('learning_area', ''));
+
+        if ($area !== '' && !array_key_exists($area, User::learningAreaOptions())) {
+            Yii::$app->session->setFlash('error', 'กลุ่มสาระการเรียนรู้ไม่ถูกต้อง');
+            return $this->redirect(Yii::$app->request->referrer ?: ['index']);
+        }
+
+        $model->learning_area = $area !== '' ? $area : null;
+        if ($model->save(false, ['learning_area', 'updated_at'])) {
+            Yii::$app->session->setFlash('success', 'บันทึกกลุ่มสาระการเรียนรู้สำหรับ ' . $model->displayName() . ' เรียบร้อยแล้ว');
+        }
+
+        return $this->redirect(Yii::$app->request->referrer ?: ['index']);
     }
 
     public function actionApprove(int $id): Response
