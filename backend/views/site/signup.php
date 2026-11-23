@@ -35,37 +35,37 @@ $hasLineLinked = !empty($model->line_user_id);
         <div class="col-lg-4 col-md-5 d-none d-md-flex login-brand-panel text-white">
             <div class="d-flex flex-column justify-content-between p-4 p-xl-5 w-100">
                 <div>
-                    <div class="login-brand-mark">
+                    <div class="login-brand-mark mb-4">
                         <i class="bi bi-building-check" aria-hidden="true"></i>
                         <span>e-Office</span>
                     </div>
-                </div>
 
-                <div class="my-auto py-4">
-                    <h2 class="fw-bold mb-3 login-brand-title">
-                        สมัครสมาชิก<br>ครูและบุคลากร
-                    </h2>
-                    <p class="opacity-75 mb-0 login-brand-text">
-                        โรงเรียนกุดชุมวิทยาคม ยินดีต้อนรับคุณครูทุกท่านเข้าสู่ระบบงานสารบรรณดิจิทัล
-                    </p>
+                    <div class="py-2">
+                        <h2 class="fw-bold mb-3 login-brand-title">
+                            สมัครสมาชิก<br>ครูและบุคลากร
+                        </h2>
+                        <p class="opacity-75 mb-0 login-brand-text">
+                            โรงเรียนกุดชุมวิทยาคม ยินดีต้อนรับคุณครูทุกท่านเข้าสู่ระบบงานสารบรรณดิจิทัล
+                        </p>
 
-                    <div class="mt-4 pt-3 border-top border-white border-opacity-25 small">
-                        <div class="d-flex align-items-center gap-2 mb-2">
-                            <i class="bi bi-chat-check-fill fs-5 text-success"></i>
-                            <span>ผูก LINE เพื่อรับการแจ้งเตือนงาน</span>
-                        </div>
-                        <div class="d-flex align-items-center gap-2 mb-2">
-                            <i class="bi bi-shield-check fs-5 text-info"></i>
-                            <span>Admin ตรวจสอบความถูกต้อง</span>
-                        </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <i class="bi bi-bell-fill fs-5 text-warning"></i>
-                            <span>แจ้งผลการอนุมัติผ่าน LINE ทันที</span>
+                        <div class="mt-4 pt-3 border-top border-white border-opacity-25 small">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-chat-check-fill fs-5 text-success"></i>
+                                <span>ผูก LINE เพื่อรับการแจ้งเตือนงาน</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="bi bi-shield-check fs-5 text-info"></i>
+                                <span>Admin ตรวจสอบความถูกต้อง</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-bell-fill fs-5 text-warning"></i>
+                                <span>แจ้งผลการอนุมัติผ่าน LINE ทันที</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="small opacity-50">
+                <div class="small opacity-50 mt-4">
                     &copy; <?= date('Y') ?> โรงเรียนกุดชุมวิทยาคม
                 </div>
             </div>
@@ -87,6 +87,7 @@ $hasLineLinked = !empty($model->line_user_id);
 
                 <?php $form = ActiveForm::begin([
                     'id' => 'form-signup',
+                    'options' => ['enctype' => 'multipart/form-data'],
                 ]); ?>
 
                 <!-- ================= 1. เชื่อมต่อ Line ================= -->
@@ -144,46 +145,44 @@ $hasLineLinked = !empty($model->line_user_id);
                         <span class="text-muted small ms-auto" style="font-size: 0.75rem;">Account Credentials</span>
                     </div>
 
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <?= $form->field($model, 'username', [
-                                'template' => sprintf($htmlIcon, 'bi-person'),
-                                'inputOptions' => [
-                                    'class' => 'form-control',
-                                    'placeholder' => 'เลขบัตร 13 หลัก หรือภาษาอังกฤษ',
-                                ],
-                            ])->textInput()->label('ชื่อผู้ใช้ (Username)', $labelOptions)->hint('แนะนำให้ใช้เลขบัตรประชาชน 13 หลัก เพื่อง่ายต่อการจำ') ?>
-                        </div>
+                    <div class="mb-3">
+                        <?= $form->field($model, 'username', [
+                            'template' => sprintf($htmlIcon, 'bi-person'),
+                            'inputOptions' => [
+                                'class' => 'form-control',
+                                'placeholder' => 'ชื่อภาษาอังกฤษ',
+                            ],
+                        ])->textInput()->label('ชื่อผู้ใช้ (Username)', $labelOptions)->hint('ชื่อภาษาอังกฤษ (ไม่มีเว้นวรรคหรืออักขระพิเศษ) ใช้ในการเข้าสู่ระบบ') ?>
+                    </div>
 
-                        <div class="col-md-6">
-                            <?= $form->field($model, 'email', [
-                                'template' => sprintf($htmlIcon, 'bi-envelope'),
-                                'inputOptions' => [
-                                    'class' => 'form-control',
-                                    'placeholder' => 'เช่น teacher@kudchum.ac.th',
-                                ],
-                            ])->textInput()->label('อีเมล (Email)', $labelOptions)->hint('ใช้สำหรับรับข้อมูลข่าวสารและการกู้คืนบัญชี') ?>
-                        </div>
+                    <div class="mb-3">
+                        <?= $form->field($model, 'email', [
+                            'template' => sprintf($htmlIcon, 'bi-envelope'),
+                            'inputOptions' => [
+                                'class' => 'form-control',
+                                'placeholder' => 'เช่น teacher@schoolkc.ac.th',
+                            ],
+                        ])->textInput()->label('อีเมล (Email)', $labelOptions)->hint('ใช้สำหรับรับข้อมูลข่าวสารและการกู้คืนบัญชี') ?>
+                    </div>
 
-                        <div class="col-md-6">
-                            <?= $form->field($model, 'password', [
-                                'template' => sprintf($htmlIcon, 'bi-lock'),
-                                'inputOptions' => [
-                                    'class' => 'form-control',
-                                    'placeholder' => 'อย่างน้อย 6 ตัวอักษร',
-                                ],
-                            ])->passwordInput()->label('กำหนดรหัสผ่าน', $labelOptions) ?>
-                        </div>
+                    <div class="mb-3">
+                        <?= $form->field($model, 'password', [
+                            'template' => sprintf($htmlIcon, 'bi-lock'),
+                            'inputOptions' => [
+                                'class' => 'form-control',
+                                'placeholder' => 'อย่างน้อย 6 ตัวอักษร',
+                            ],
+                        ])->passwordInput()->label('กำหนดรหัสผ่าน', $labelOptions) ?>
+                    </div>
 
-                        <div class="col-md-6">
-                            <?= $form->field($model, 'password_repeat', [
-                                'template' => sprintf($htmlIcon, 'bi-shield-lock'),
-                                'inputOptions' => [
-                                    'class' => 'form-control',
-                                    'placeholder' => 'พิมพ์รหัสผ่านเดิมอีกครั้ง',
-                                ],
-                            ])->passwordInput()->label('ยืนยันรหัสผ่านอีกครั้ง', $labelOptions) ?>
-                        </div>
+                    <div class="mb-3">
+                        <?= $form->field($model, 'password_repeat', [
+                            'template' => sprintf($htmlIcon, 'bi-shield-lock'),
+                            'inputOptions' => [
+                                'class' => 'form-control',
+                                'placeholder' => 'พิมพ์รหัสผ่านเดิมอีกครั้ง',
+                            ],
+                        ])->passwordInput()->label('ยืนยันรหัสผ่านอีกครั้ง', $labelOptions) ?>
                     </div>
                 </div>
 
@@ -195,58 +194,58 @@ $hasLineLinked = !empty($model->line_user_id);
                         <span class="text-muted small ms-auto" style="font-size: 0.75rem;">Personnel Details</span>
                     </div>
 
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <?= $form->field($model, 'fullname', [
-                                'template' => sprintf($htmlIcon, 'bi-person-badge'),
-                                'inputOptions' => [
-                                    'class' => 'form-control',
-                                    'placeholder' => 'เช่น นายสมชาย ใจดี',
-                                ],
-                            ])->textInput()->label('ชื่อ - นามสกุลจริง (ทางการ)', $labelOptions)->hint('ระบุคำนำหน้าและชื่อ-นามสกุลจริงสำหรับระบบราชการ') ?>
-                        </div>
+                    <div class="mb-3">
+                        <?= $form->field($model, 'fullname', [
+                            'template' => sprintf($htmlIcon, 'bi-person-badge'),
+                            'inputOptions' => [
+                                'class' => 'form-control',
+                                'placeholder' => 'เช่น นายสมชาย ใจดี',
+                            ],
+                        ])->textInput()->label('ชื่อ - นามสกุลจริง (ทางการ)', $labelOptions)->hint('ระบุคำนำหน้าและชื่อ-นามสกุลจริงสำหรับระบบราชการ') ?>
+                    </div>
 
-                        <div class="col-md-6">
-                            <?= $form->field($model, 'phone', [
-                                'template' => sprintf($htmlIcon, 'bi-telephone'),
-                                'inputOptions' => [
-                                    'class' => 'form-control',
-                                    'placeholder' => 'เช่น 0812345678',
-                                ],
-                            ])->textInput()->label('เบอร์โทรศัพท์มือถือ', $labelOptions) ?>
-                        </div>
+                    <div class="mb-3">
+                        <?= $form->field($model, 'phone', [
+                            'template' => sprintf($htmlIcon, 'bi-telephone'),
+                            'inputOptions' => [
+                                'class' => 'form-control',
+                                'placeholder' => 'เช่น 0812345678',
+                            ],
+                        ])->textInput()->label('เบอร์โทรศัพท์มือถือ', $labelOptions) ?>
+                    </div>
 
-                        <div class="col-md-6">
-                            <?= $form->field($model, 'department_id', [
-                                'template' => sprintf($htmlIcon, 'bi-building'),
-                                'inputOptions' => [
-                                    'class' => 'form-select',
-                                ],
-                            ])->dropDownList($deptOptions, [
-                                'prompt' => '-- เลือกกลุ่มงานที่สังกัด --',
-                            ])->label('กลุ่มงานที่สังกัด (ฝ่ายบริหาร)', $labelOptions)->hint('เลือกฝ่ายงานบริหารที่สังกัด เช่น วิชาการ, บุคคล, ทั่วไป ฯลฯ') ?>
-                        </div>
+                    <div class="mb-3">
+                        <?= $form->field($model, 'department_id', [
+                            'template' => sprintf($htmlIcon, 'bi-building'),
+                            'inputOptions' => [
+                                'class' => 'form-select',
+                            ],
+                        ])->dropDownList($deptOptions, [
+                            'prompt' => '-- เลือกกลุ่มงานที่สังกัด --',
+                        ])->label('กลุ่มงานที่สังกัด (ฝ่ายบริหาร)', $labelOptions)->hint('เลือกฝ่ายงานบริหารที่สังกัด เช่น วิชาการ, บุคคล, ทั่วไป ฯลฯ') ?>
+                    </div>
 
-                        <div class="col-md-6">
-                            <?= $form->field($model, 'learning_area', [
-                                'template' => sprintf($htmlIcon, 'bi-book'),
-                                'inputOptions' => [
-                                    'class' => 'form-select',
-                                ],
-                            ])->dropDownList(User::learningAreaOptions(), [
-                                'prompt' => '-- เลือกกลุ่มสาระการเรียนรู้ --',
-                            ])->label('กลุ่มสาระการเรียนรู้', $labelOptions)->hint('ครูเลือกกลุ่มสาระฯ ที่สอน (เจ้าหน้าที่/บุคลากร เลือก "ไม่สังกัดกลุ่มสาระ")') ?>
-                        </div>
+                    <div class="mb-3">
+                        <?= $form->field($model, 'learning_area', [
+                            'template' => sprintf($htmlIcon, 'bi-book'),
+                            'inputOptions' => [
+                                'class' => 'form-select',
+                            ],
+                        ])->dropDownList(User::learningAreaOptions(), [
+                            'prompt' => '-- เลือกกลุ่มสาระการเรียนรู้ --',
+                        ])->label('กลุ่มสาระการเรียนรู้', $labelOptions)->hint('ครูเลือกกลุ่มสาระฯ ที่สอน (เจ้าหน้าที่/บุคลากร เลือก "ไม่สังกัดกลุ่มสาระ")') ?>
+                    </div>
 
-                        <div class="col-12">
-                            <?= $form->field($model, 'id_card', [
-                                'template' => sprintf($htmlIcon, 'bi-card-heading'),
-                                'inputOptions' => [
-                                    'class' => 'form-control',
-                                    'placeholder' => 'เลขประจำตัวประชาชน 13 หลัก (ถ้ามี)',
-                                    'maxlength' => 20,
-                                ],
-                            ])->textInput()->label('เลขประจำตัวประชาชน (ถ้ามี)', $labelOptions)->hint('สำหรับตรวจสอบยืนยันข้อมูลความถูกต้องในระบบสารบรรณ') ?>
+                    <div class="mb-3">
+                        <?= $form->field($model, 'signatureFile')->fileInput([
+                            'accept' => 'image/png,image/jpeg',
+                            'id' => 'signup-signature-input',
+                            'class' => 'form-control',
+                        ])->label('ภาพถ่ายหรือภาพสแกนลายมือชื่อ (ลายเซ็น)', $labelOptions)->hint('แนะนำให้อัปโหลดภาพถ่ายหรือภาพสแกนลายเซ็นบนกระดาษขาว (PNG หรือ JPG ไม่เกิน 2 MB) เพื่อใช้ประทับตราในระบบ') ?>
+
+                        <div id="signature-preview-box" class="d-none mt-2 p-2 border rounded bg-light text-center" style="max-width: 260px;">
+                            <span class="small text-muted d-block mb-1">ตัวอย่างภาพลายเซ็นที่เลือก:</span>
+                            <img id="signature-preview-img" src="" alt="ตัวอย่างลายเซ็น" style="max-height: 80px; object-fit: contain;">
                         </div>
                     </div>
                 </div>
@@ -285,3 +284,28 @@ $hasLineLinked = !empty($model->line_user_id);
 
     </div>
 </div>
+
+<?php
+$sigPreviewJs = <<<JS
+var sigInput = document.getElementById('signup-signature-input');
+var prevBox = document.getElementById('signature-preview-box');
+var prevImg = document.getElementById('signature-preview-img');
+if (sigInput && prevBox && prevImg) {
+    sigInput.addEventListener('change', function(e) {
+        var file = e.target.files && e.target.files[0];
+        if (file) {
+            var reader = new FileReader();
+            reader.onload = function(evt) {
+                prevImg.src = evt.target.result;
+                prevBox.classList.remove('d-none');
+            };
+            reader.readAsDataURL(file);
+        } else {
+            prevBox.classList.add('d-none');
+            prevImg.src = '';
+        }
+    });
+}
+JS;
+$this->registerJs($sigPreviewJs);
+?>

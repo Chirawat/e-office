@@ -10,6 +10,8 @@ use common\models\User;
 use common\models\UserDepartment;
 use Yii;
 use yii\base\Model;
+use yii\helpers\FileHelper;
+use yii\web\UploadedFile;
 
 /**
  * SignupForm for teachers and school staff
@@ -25,6 +27,7 @@ class SignupForm extends Model
     public ?string $learning_area = null;
     public string $password = '';
     public string $password_repeat = '';
+    public ?UploadedFile $signatureFile = null;
 
     // ฟิลด์สำหรับข้อมูล LINE ที่ผูกมัด
     public string $line_user_id = '';
@@ -51,6 +54,7 @@ class SignupForm extends Model
             ['learning_area', 'string', 'max' => 150],
             ['password', 'string', 'min' => 6, 'max' => 64],
             ['password_repeat', 'compare', 'compareAttribute' => 'password', 'message' => 'รหัสผ่านยืนยันไม่ตรงกัน'],
+            ['signatureFile', 'file', 'skipOnEmpty' => true, 'extensions' => ['png', 'jpg', 'jpeg'], 'maxSize' => 2 * 1024 * 1024],
         ];
     }
 
@@ -66,8 +70,24 @@ class SignupForm extends Model
             'learning_area' => 'กลุ่มสาระการเรียนรู้',
             'password' => 'กำหนดรหัสผ่าน (อย่างน้อย 6 ตัวอักษร)',
             'password_repeat' => 'ยืนยันรหัสผ่านอีกครั้ง',
+            'signatureFile' => 'ภาพถ่ายหรือภาพสแกนลายมือชื่อ (ลายเซ็น)',
             'line_user_id' => 'บัญชี LINE ที่เชื่อมต่อ',
         ];
+    }
+
+    public function load($data, $formName = null): bool
+    {
+        $scope = $formName ?? $this->formName();
+        if ($scope === '' && isset($data['signatureFile'])) {
+            unset($data['signatureFile']);
+        } elseif (isset($data[$scope]['signatureFile'])) {
+            unset($data[$scope]['signatureFile']);
+        }
+
+        $loaded = parent::load($data, $formName);
+        $this->signatureFile = UploadedFile::getInstance($this, 'signatureFile');
+
+        return $loaded || $this->signatureFile !== null;
     }
 
     public function signup(): ?User
@@ -102,10 +122,85 @@ class SignupForm extends Model
             ]);
             $ud->save(false);
 
+            // บันทึกไฟล์ภาพลายเซ็น (ถ้ามีอัปโหลด)
+            $this->saveSignatureFile($user);
+
             return $user;
         }
 
         return null;
+    }
+
+    private function saveSignatureFile(User $user): bool
+    {
+        if ($this->signatureFile === null) {
+            return true;
+        }
+
+        $dir = Yii::getAlias('@backend/web/uploads/signatures/' . $user->id);
+        try {
+            FileHelper::createDirectory($dir, 0775, true);
+        } catch (\Throwable $e) {
+            Yii::error($e, __METHOD__);
+            $this->addError('signatureFile', 'ไม่สามารถสร้างโฟลเดอร์สำหรับเก็บลายเซ็นได้: ' . $dir);
+            return false;
+        }
+
+        if (!is_writable($dir)) {
+            $this->addError('signatureFile', 'โฟลเดอร์สำหรับเก็บลายเซ็นเขียนไฟล์ไม่ได้: ' . $dir);
+            return false;
+        }
+
+        $path = $dir . '/signature.jpg';
+        try {
+            if (!$this->writeNormalizedSignatureImage((string) $this->signatureFile->tempName, $path)) {
+                $this->addError('signatureFile', 'ไม่สามารถประมวลผลไฟล์ภาพลายเซ็นได้ กรุณาตรวจสอบว่าเซิร์ฟเวอร์เปิดใช้งาน GD extension');
+                return false;
+            }
+        } catch (\Throwable $e) {
+            Yii::error($e, __METHOD__);
+            $this->addError('signatureFile', 'เกิดข้อผิดพลาดในการบันทึกภาพลายเซ็น: ' . $e->getMessage());
+            return false;
+        }
+
+        $user->signature_path = 'uploads/signatures/' . $user->id . '/signature.jpg';
+        $user->save(false, ['signature_path', 'updated_at']);
+
+        return true;
+    }
+
+    private function writeNormalizedSignatureImage(string $sourcePath, string $targetPath): bool
+    {
+        if (!is_file($sourcePath) || !is_readable($sourcePath)) {
+            return false;
+        }
+
+        if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg')) {
+            return false;
+        }
+
+        $contents = file_get_contents($sourcePath);
+        if ($contents === false) {
+            return false;
+        }
+
+        $source = @imagecreatefromstring($contents);
+        if ($source === false) {
+            return false;
+        }
+
+        $width = imagesx($source);
+        $height = imagesy($source);
+        $canvas = imagecreatetruecolor($width, $height);
+        $white = imagecolorallocate($canvas, 255, 255, 255);
+        imagefilledrectangle($canvas, 0, 0, $width, $height, $white);
+        imagecopy($canvas, $source, 0, 0, 0, 0, $width, $height);
+
+        $saved = imagejpeg($canvas, $targetPath, 95);
+        imagedestroy($source);
+        imagedestroy($canvas);
+
+        return $saved;
     }
 }
 

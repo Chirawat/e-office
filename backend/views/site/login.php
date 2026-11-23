@@ -70,7 +70,7 @@ $labelOptions = ['class' => 'form-label fw-semibold'];
                         'template' => sprintf($htmlIcon, 'bi-person'),
                         'inputOptions' => [
                             'class' => 'form-control',
-                            'placeholder' => 'ชื่อผู้ใช้ หรือ เลขบัตร ปชช.',
+                            'placeholder' => 'ชื่อภาษาอังกฤษ',
                             'autofocus' => true,
                         ],
                     ])->textInput()->label('ชื่อผู้ใช้', $labelOptions) ?>
