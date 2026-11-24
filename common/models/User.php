@@ -24,6 +24,7 @@ use yii\web\IdentityInterface;
  * @property string $verification_token
  * @property string $email
  * @property string $role
+ * @property string|null $deputy_title
  * @property int|null $department_id
  * @property string|null $learning_area
  * @property string|null $signature_path
@@ -50,6 +51,9 @@ class User extends ActiveRecord implements IdentityInterface
     public const ROLE_DIRECTOR = 'director';
     public const ROLE_STAFF = 'staff';
     public const ROLE_GENERAL_USER = 'general_user';
+
+    public const DEPUTY_TITLE_DEPUTY = 'deputy';
+    public const DEPUTY_TITLE_ASSISTANT = 'assistant';
     /**
      * {@inheritdoc}
      */
@@ -78,6 +82,7 @@ class User extends ActiveRecord implements IdentityInterface
             ['status', 'in', 'range' => [self::STATUS_ACTIVE, self::STATUS_INACTIVE, self::STATUS_DELETED]],
             ['role', 'default', 'value' => self::ROLE_OFFICER],
             ['role', 'in', 'range' => array_keys(self::roleOptions())],
+            ['deputy_title', 'in', 'range' => array_keys(self::deputyTitleOptions()), 'skipOnEmpty' => true],
             ['department_id', 'integer'],
             ['department_id', 'exist', 'targetClass' => Department::class, 'targetAttribute' => ['department_id' => 'id']],
             [['fullname'], 'string', 'max' => 150],
@@ -100,6 +105,7 @@ class User extends ActiveRecord implements IdentityInterface
             'phone' => 'เบอร์โทรศัพท์',
             'id_card' => 'เลขประจำตัวประชาชน',
             'role' => 'บทบาทผู้ใช้',
+            'deputy_title' => 'ตำแหน่งผู้บริหาร (รอง ผอ. / ผู้ช่วย ผอ.)',
             'department_id' => 'กลุ่มงาน',
             'learning_area' => 'กลุ่มสาระการเรียนรู้',
             'signature_path' => 'ไฟล์ลายเซ็น',
@@ -135,6 +141,24 @@ class User extends ActiveRecord implements IdentityInterface
             self::ROLE_STAFF => 'หัวหน้ากลุ่มงาน',
             self::ROLE_GENERAL_USER => 'ผู้ใช้ทั่วไป',
         ];
+    }
+
+    public static function deputyTitleOptions(): array
+    {
+        return [
+            self::DEPUTY_TITLE_DEPUTY => 'รองผู้อำนวยการ',
+            self::DEPUTY_TITLE_ASSISTANT => 'ผู้ช่วยผู้อำนวยการ',
+        ];
+    }
+
+    public function deputyTitleShort(): string
+    {
+        return $this->deputy_title === self::DEPUTY_TITLE_ASSISTANT ? 'ผู้ช่วย ผอ.' : 'รอง ผอ.';
+    }
+
+    public function deputyTitleFull(): string
+    {
+        return $this->deputy_title === self::DEPUTY_TITLE_ASSISTANT ? 'ผู้ช่วยผู้อำนวยการ' : 'รองผู้อำนวยการ';
     }
 
     public static function learningAreaOptions(): array
@@ -204,12 +228,14 @@ class User extends ActiveRecord implements IdentityInterface
         $isActing = SystemSetting::isActingDirector() && (int) $this->id === (int) SystemSetting::getActingDirectorUserId();
         if ($isActing) {
             if ($this->role === self::ROLE_DEPUTY_DIRECTOR) {
-                return 'รอง ผอ. (รักษาการแทน ผอ.)';
+                return $this->deputyTitleShort() . ' (รักษาการแทน ผอ.)';
             }
             return 'รักษาการแทน ผอ.';
         }
 
-        $base = self::roleOptions()[$this->role] ?? $this->role;
+        $base = $this->role === self::ROLE_DEPUTY_DIRECTOR
+            ? $this->deputyTitleShort()
+            : (self::roleOptions()[$this->role] ?? $this->role);
         if ($this->role === self::ROLE_DEPUTY_DIRECTOR && $this->department !== null) {
             return $base . ' (' . $this->department->name . ')';
         }
@@ -243,7 +269,7 @@ class User extends ActiveRecord implements IdentityInterface
         }
 
         if ($this->role === self::ROLE_DEPUTY_DIRECTOR || $context === 'deputy') {
-            return 'รองผู้อำนวยการ' . $schoolName;
+            return $this->deputyTitleFull() . $schoolName;
         }
 
         if ($this->role === self::ROLE_STAFF || $context === 'staff') {

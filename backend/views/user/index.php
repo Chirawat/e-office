@@ -160,7 +160,25 @@ $renderUserRow = function (User $model, int $index, bool $showLearningAreaSelect
     $out .= '<td style="min-width: 150px;">';
     if ($model->role === User::ROLE_DEPUTY_DIRECTOR) {
         $deptName = $model->department->name ?? '-';
-        $out .= '<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1"><i class="bi bi-shield-check me-1"></i>กำกับ: ' . Html::encode($deptName) . '</span>';
+        $isAssistant = $model->deputy_title === User::DEPUTY_TITLE_ASSISTANT;
+        $badgeStyle = $isAssistant
+            ? 'background-color: #f3e8ff; color: #6d28d9; border: 1px solid #d8b4fe;'
+            : '';
+        $badgeClass = $isAssistant
+            ? 'badge px-2 py-1'
+            : 'badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1';
+        $out .= '<span class="' . $badgeClass . '" style="' . $badgeStyle . '"><i class="bi bi-shield-check me-1"></i>' . Html::encode($model->deputyTitleShort()) . ' · กำกับ: ' . Html::encode($deptName) . '</span>';
+        $out .= '<div class="mt-1">';
+        $out .= Html::beginForm(['update-deputy-title', 'id' => $model->id], 'post', ['class' => 'd-flex align-items-center gap-1'])
+            . $csrf
+            . Html::dropDownList('deputy_title', $model->deputy_title ?: User::DEPUTY_TITLE_DEPUTY, User::deputyTitleOptions(), [
+                'class' => 'form-select form-select-sm',
+                'style' => 'font-size: 0.76rem; max-width: 170px;',
+                'aria-label' => 'เลือกตำแหน่งผู้บริหาร',
+            ])
+            . Html::submitButton('<i class="bi bi-check-lg"></i>', ['class' => 'btn btn-sm btn-outline-primary py-0 px-2', 'title' => 'บันทึกตำแหน่ง'])
+            . Html::endForm();
+        $out .= '</div>';
     } elseif ($model->role === User::ROLE_STAFF) {
         $deptName = $model->department->name ?? '-';
         $out .= '<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1"><i class="bi bi-person-badge me-1"></i>หัวหน้า: ' . Html::encode($deptName) . '</span>';
@@ -720,10 +738,28 @@ $renderUserRow = function (User $model, int $index, bool $showLearningAreaSelect
                             'attribute' => 'department_id',
                             'label' => 'กลุ่มงาน',
                             'format' => 'raw',
-                            'value' => static function (User $model): string {
+                            'value' => static function (User $model) use ($csrf): string {
                                 if ($model->role === User::ROLE_DEPUTY_DIRECTOR) {
                                     $deptName = $model->department->name ?? '-';
-                                    return '<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1"><i class="bi bi-shield-check me-1"></i>กำกับ: ' . Html::encode($deptName) . '</span>';
+                                    $isAssistant = $model->deputy_title === User::DEPUTY_TITLE_ASSISTANT;
+                                    $badgeStyle = $isAssistant
+                                        ? 'background-color: #f3e8ff; color: #6d28d9; border: 1px solid #d8b4fe;'
+                                        : '';
+                                    $badgeClass = $isAssistant
+                                        ? 'badge px-2 py-1'
+                                        : 'badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1';
+                                    $html = '<span class="' . $badgeClass . '" style="' . $badgeStyle . '"><i class="bi bi-shield-check me-1"></i>' . Html::encode($model->deputyTitleShort()) . ' · กำกับ: ' . Html::encode($deptName) . '</span>';
+                                    $html .= '<div class="mt-1">'
+                                        . Html::beginForm(['update-deputy-title', 'id' => $model->id], 'post', ['class' => 'd-flex align-items-center gap-1'])
+                                        . $csrf
+                                        . Html::dropDownList('deputy_title', $model->deputy_title ?: User::DEPUTY_TITLE_DEPUTY, User::deputyTitleOptions(), [
+                                            'class' => 'form-select form-select-sm',
+                                            'style' => 'font-size: 0.76rem; max-width: 170px;',
+                                        ])
+                                        . Html::submitButton('<i class="bi bi-check-lg"></i>', ['class' => 'btn btn-sm btn-outline-primary py-0 px-2', 'title' => 'บันทึกตำแหน่ง'])
+                                        . Html::endForm()
+                                        . '</div>';
+                                    return $html;
                                 }
                                 if ($model->role === User::ROLE_STAFF) {
                                     $deptName = $model->department->name ?? '-';

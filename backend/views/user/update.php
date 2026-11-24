@@ -44,6 +44,8 @@ $departmentItems = ArrayHelper::map($departments, 'id', 'name');
                     </div>
                 </div>
 
+                <?= $form->field($model, 'fullname')->textInput(['maxlength' => true, 'placeholder' => 'เช่น นายสมชาย ใจดี'])->hint('ชื่อ-นามสกุลจริงพร้อมคำนำหน้า สำหรับแสดงในระบบและใต้ลายเซ็นเอกสาร PDF') ?>
+
                 <?= $form->field($model, 'password')->passwordInput(['maxlength' => true])->hint('เว้นว่างไว้ถ้าไม่ต้องการเปลี่ยนรหัสผ่าน') ?>
 
                 <div class="row">
@@ -53,6 +55,12 @@ $departmentItems = ArrayHelper::map($departments, 'id', 'name');
                     <div class="col-md-6">
                         <?= $form->field($model, 'status')->dropDownList(UserUpdateForm::statusOptions()) ?>
                     </div>
+                </div>
+
+                <div id="deputy-title-wrapper" style="<?= $model->role === User::ROLE_DEPUTY_DIRECTOR ? '' : 'display: none;' ?>">
+                    <?= $form->field($model, 'deputy_title')->dropDownList(User::deputyTitleOptions())
+                        ->label('ตำแหน่งผู้บริหาร (รองผู้อำนวยการ / ผู้ช่วยผู้อำนวยการ)')
+                        ->hint('เลือกระบุว่าเป็น "รองผู้อำนวยการ" หรือ "ผู้ช่วยผู้อำนวยการ" เพื่อแสดงผลในระบบและใต้ลายเซ็นเอกสาร PDF') ?>
                 </div>
 
                 <?= $form->field($model, 'department_id')->dropDownList($departmentItems, [
@@ -89,3 +97,17 @@ $departmentItems = ArrayHelper::map($departments, 'id', 'name');
         </aside>
     </div>
 </div>
+<?php
+$this->registerJs(<<<JS
+(function() {
+    var roleSelect = document.getElementById('userupdateform-role');
+    var wrapper = document.getElementById('deputy-title-wrapper');
+    if (!roleSelect || !wrapper) return;
+    function toggleDeputyTitle() {
+        wrapper.style.display = (roleSelect.value === 'deputy_director') ? '' : 'none';
+    }
+    roleSelect.addEventListener('change', toggleDeputyTitle);
+    toggleDeputyTitle();
+})();
+JS);
+?>

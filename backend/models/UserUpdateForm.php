@@ -16,9 +16,11 @@ use yii\web\UploadedFile;
 class UserUpdateForm extends Model
 {
     public string $username = '';
+    public string $fullname = '';
     public string $email = '';
     public string $password = '';
     public string $role = User::ROLE_OFFICER;
+    public ?string $deputy_title = User::DEPUTY_TITLE_DEPUTY;
     public int|string|null $department_id = null;
     public ?string $learning_area = null;
     public array $department_ids = [];
@@ -31,8 +33,10 @@ class UserUpdateForm extends Model
     {
         $this->user = $user;
         $this->username = $user->username;
+        $this->fullname = (string) ($user->fullname ?? '');
         $this->email = $user->email;
         $this->role = $user->role;
+        $this->deputy_title = $user->deputy_title ?: User::DEPUTY_TITLE_DEPUTY;
         $this->department_id = $user->department_id !== null ? (int) $user->department_id : null;
         $this->learning_area = (string) ($user->learning_area ?? '');
         $this->department_ids = $user->departmentIds();
@@ -45,14 +49,16 @@ class UserUpdateForm extends Model
     {
         return [
             [['username', 'email', 'role', 'status'], 'required'],
-            [['username', 'email', 'password', 'learning_area'], 'trim'],
+            [['username', 'fullname', 'email', 'password', 'learning_area'], 'trim'],
             ['username', 'string', 'min' => 2, 'max' => 255],
+            ['fullname', 'string', 'max' => 150],
             ['username', UniqueValidator::class, 'targetClass' => User::class, 'filter' => ['not', ['id' => $this->user->id]], 'message' => 'Username นี้ถูกใช้แล้ว'],
             ['email', 'email'],
             ['email', 'string', 'max' => 255],
             ['email', UniqueValidator::class, 'targetClass' => User::class, 'filter' => ['not', ['id' => $this->user->id]], 'message' => 'Email นี้ถูกใช้แล้ว'],
             ['password', 'string', 'min' => 6, 'max' => 128],
             ['role', 'in', 'range' => array_keys(User::roleOptions())],
+            ['deputy_title', 'in', 'range' => array_keys(User::deputyTitleOptions()), 'skipOnEmpty' => true],
             ['learning_area', 'string', 'max' => 150],
             ['department_id', 'required', 'when' => function ($model) {
                 return in_array($model->role, [User::ROLE_DEPUTY_DIRECTOR, User::ROLE_STAFF], true);
@@ -95,9 +101,11 @@ class UserUpdateForm extends Model
     {
         return [
             'username' => 'Username',
+            'fullname' => 'ชื่อ - นามสกุลจริง',
             'email' => 'Email',
             'password' => 'Password ใหม่',
             'role' => 'บทบาทผู้ใช้',
+            'deputy_title' => 'ตำแหน่ง (รองผู้อำนวยการ / ผู้ช่วยผู้อำนวยการ)',
             'department_id' => 'กลุ่มงาน',
             'learning_area' => 'กลุ่มสาระการเรียนรู้',
             'department_ids' => 'สังกัดกลุ่มงาน',
@@ -122,8 +130,10 @@ class UserUpdateForm extends Model
         }
 
         $this->user->username = $this->username;
+        $this->user->fullname = $this->fullname !== '' ? $this->fullname : null;
         $this->user->email = $this->email;
         $this->user->role = $this->role;
+        $this->user->deputy_title = $this->role === User::ROLE_DEPUTY_DIRECTOR ? ($this->deputy_title ?: User::DEPUTY_TITLE_DEPUTY) : null;
         $this->user->department_id = $this->department_id !== null && $this->department_id !== '' ? (int) $this->department_id : null;
         $this->user->learning_area = $this->learning_area !== '' ? $this->learning_area : null;
         $this->user->status = $this->status;

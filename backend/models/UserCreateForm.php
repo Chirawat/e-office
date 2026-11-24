@@ -18,6 +18,7 @@ class UserCreateForm extends Model
     public string $email = '';
     public string $password = '';
     public string $role = User::ROLE_OFFICER;
+    public ?string $deputy_title = User::DEPUTY_TITLE_DEPUTY;
     public int|string|null $department_id = null;
     public ?string $learning_area = null;
     public array $department_ids = [];
@@ -36,6 +37,7 @@ class UserCreateForm extends Model
             ['email', 'unique', 'targetClass' => User::class, 'message' => 'Email นี้ถูกใช้แล้ว'],
             ['password', 'string', 'min' => 6, 'max' => 128],
             ['role', 'in', 'range' => array_keys(User::roleOptions())],
+            ['deputy_title', 'in', 'range' => array_keys(User::deputyTitleOptions()), 'skipOnEmpty' => true],
             ['learning_area', 'string', 'max' => 150],
             ['department_id', 'required', 'when' => function ($model) {
                 return in_array($model->role, [User::ROLE_DEPUTY_DIRECTOR, User::ROLE_STAFF], true);
@@ -81,6 +83,7 @@ class UserCreateForm extends Model
             'email' => 'Email',
             'password' => 'Password',
             'role' => 'บทบาทผู้ใช้',
+            'deputy_title' => 'ตำแหน่ง (รองผู้อำนวยการ / ผู้ช่วยผู้อำนวยการ)',
             'department_id' => 'กลุ่มงาน',
             'learning_area' => 'กลุ่มสาระการเรียนรู้',
             'department_ids' => 'สังกัดกลุ่มงาน',
@@ -108,6 +111,7 @@ class UserCreateForm extends Model
             'username' => $this->username,
             'email' => $this->email,
             'role' => $this->role,
+            'deputy_title' => $this->role === User::ROLE_DEPUTY_DIRECTOR ? ($this->deputy_title ?: User::DEPUTY_TITLE_DEPUTY) : null,
             'department_id' => $departmentId,
             'learning_area' => $this->learning_area !== '' ? $this->learning_area : null,
             'status' => $this->status,

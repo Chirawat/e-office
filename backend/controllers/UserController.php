@@ -39,6 +39,7 @@ class UserController extends Controller
                 'class' => VerbFilter::class,
                 'actions' => [
                     'update-role' => ['post'],
+                    'update-deputy-title' => ['post'],
                     'update-learning-area' => ['post'],
                     'approve' => ['post'],
                     'reset-password' => ['post'],
@@ -258,11 +259,38 @@ class UserController extends Controller
         }
 
         $model->role = $role;
-        if ($model->save(false, ['role', 'updated_at'])) {
+        if ($role !== User::ROLE_DEPUTY_DIRECTOR) {
+            $model->deputy_title = null;
+        }
+        if ($model->save(false, ['role', 'deputy_title', 'updated_at'])) {
             Yii::$app->session->setFlash('success', 'ปรับบทบาทผู้ใช้เรียบร้อยแล้ว');
         }
 
-        return $this->redirect(['index']);
+        return $this->redirect(Yii::$app->request->referrer ?: ['index']);
+    }
+
+    public function actionUpdateDeputyTitle(int $id): Response
+    {
+        $this->requireAdmin();
+        $model = $this->findModel($id);
+
+        if ($model->role !== User::ROLE_DEPUTY_DIRECTOR) {
+            Yii::$app->session->setFlash('error', 'สามารถกำหนดตำแหน่งรอง ผอ./ผู้ช่วย ผอ. ได้เฉพาะผู้ใช้บทบาท รอง ผอ. เท่านั้น');
+            return $this->redirect(Yii::$app->request->referrer ?: ['index']);
+        }
+
+        $title = trim((string) Yii::$app->request->post('deputy_title', ''));
+        if (!array_key_exists($title, User::deputyTitleOptions())) {
+            Yii::$app->session->setFlash('error', 'ตำแหน่งผู้บริหารไม่ถูกต้อง');
+            return $this->redirect(Yii::$app->request->referrer ?: ['index']);
+        }
+
+        $model->deputy_title = $title;
+        if ($model->save(false, ['deputy_title', 'updated_at'])) {
+            Yii::$app->session->setFlash('success', 'กำหนดตำแหน่งของ ' . $model->displayName() . ' เป็น "' . $model->deputyTitleFull() . '" เรียบร้อยแล้ว');
+        }
+
+        return $this->redirect(Yii::$app->request->referrer ?: ['index']);
     }
 
     public function actionUpdate(int $id): Response|string

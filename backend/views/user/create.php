@@ -52,6 +52,12 @@ $departmentItems = ArrayHelper::map($departments, 'id', 'name');
                     </div>
                 </div>
 
+                <div id="deputy-title-wrapper" style="<?= $model->role === User::ROLE_DEPUTY_DIRECTOR ? '' : 'display: none;' ?>">
+                    <?= $form->field($model, 'deputy_title')->dropDownList(User::deputyTitleOptions())
+                        ->label('ตำแหน่งผู้บริหาร (รองผู้อำนวยการ / ผู้ช่วยผู้อำนวยการ)')
+                        ->hint('เลือกระบุว่าเป็น "รองผู้อำนวยการ" หรือ "ผู้ช่วยผู้อำนวยการ" เพื่อแสดงผลในระบบและใต้ลายเซ็นเอกสาร PDF') ?>
+                </div>
+
                 <?= $form->field($model, 'department_id')->dropDownList($departmentItems, [
                     'prompt' => '-- เลือกกลุ่มงานที่กำกับดูแล / สังกัด --',
                 ])->label('กลุ่มงานที่กำกับดูแล / สังกัดหลัก')->hint('จำเป็นสำหรับ รอง ผอ. และหัวหน้ากลุ่มงาน เพื่อกำหนดสายการบังคับบัญชาในการตรวจ/สั่งการเอกสาร') ?>
@@ -85,3 +91,17 @@ $departmentItems = ArrayHelper::map($departments, 'id', 'name');
         </aside>
     </div>
 </div>
+<?php
+$this->registerJs(<<<JS
+(function() {
+    var roleSelect = document.getElementById('usercreateform-role');
+    var wrapper = document.getElementById('deputy-title-wrapper');
+    if (!roleSelect || !wrapper) return;
+    function toggleDeputyTitle() {
+        wrapper.style.display = (roleSelect.value === 'deputy_director') ? '' : 'none';
+    }
+    roleSelect.addEventListener('change', toggleDeputyTitle);
+    toggleDeputyTitle();
+})();
+JS);
+?>
