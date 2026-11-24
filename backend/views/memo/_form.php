@@ -14,6 +14,9 @@ use yii\helpers\Url;
 /** @var Department[] $departments */
 
 $memo = $form->memo;
+$this->registerJsFile('@web/js/pdf.min.js', ['position' => \yii\web\View::POS_END]);
+$this->registerJsFile('@web/js/pdf-lib.min.js', ['position' => \yii\web\View::POS_END]);
+$this->registerJsFile('@web/js/pdf-normalizer.js?v=2', ['position' => \yii\web\View::POS_END]);
 ?>
 
 <?php $activeForm = ActiveForm::begin(['options' => ['enctype' => 'multipart/form-data', 'class' => 'memo-form']]) ?>
@@ -47,6 +50,8 @@ $memo = $form->memo;
 
                 <?= $activeForm->field($form, 'memoPdfFile')->fileInput([
                     'accept' => 'application/pdf',
+                    'data-pdf-normalize' => '1',
+                    'data-pdf-worker-src' => Url::to('@web/js/pdf.worker.min.js'),
                 ])->hint('แนบ PDF บันทึกข้อความที่จัดหน้าเรียบร้อยแล้ว') ?>
 
                 <?php if (!$memo->isNewRecord && $memo->originalPdfFile !== null): ?>

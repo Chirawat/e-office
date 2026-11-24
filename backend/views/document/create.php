@@ -21,6 +21,9 @@ $this->title = 'ลงทะเบียนหนังสือรับ';
 $this->params['breadcrumbs'][] = ['label' => 'หนังสือรับ', 'url' => ['index']];
 $this->params['breadcrumbs'][] = $this->title;
 $this->registerCssFile('@web/css/eoffice.css', ['depends' => [\yii\bootstrap5\BootstrapAsset::class]]);
+$this->registerJsFile('@web/js/pdf.min.js', ['position' => \yii\web\View::POS_END]);
+$this->registerJsFile('@web/js/pdf-lib.min.js', ['position' => \yii\web\View::POS_END]);
+$this->registerJsFile('@web/js/pdf-normalizer.js?v=2', ['position' => \yii\web\View::POS_END]);
 
 $departmentItems = ArrayHelper::map($departments, 'id', 'name');
 $allUserItems = ArrayHelper::map($allUsers ?? [], 'id', static fn (\common\models\User $u): string => $u->displayName() . ' (' . $u->roleLabel() . ')');
@@ -155,7 +158,11 @@ $thaiTime = static function (?string $time): string {
                     <span>1 ช่องต่อ 1 ไฟล์</span>
                 </div>
 
-                <?= $activeForm->field($form, 'pdfFile')->fileInput(['accept' => 'application/pdf'])->label('ไฟล์ PDF หนังสือต้นฉบับจาก SMSS') ?>
+                <?= $activeForm->field($form, 'pdfFile')->fileInput([
+                    'accept' => 'application/pdf',
+                    'data-pdf-normalize' => '1',
+                    'data-pdf-worker-src' => \yii\helpers\Url::to('@web/js/pdf.worker.min.js'),
+                ])->label('ไฟล์ PDF หนังสือต้นฉบับจาก SMSS') ?>
 
                 <div class="upload-slot-grid">
                     <?php for ($i = 0; $i < 5; $i++): ?>

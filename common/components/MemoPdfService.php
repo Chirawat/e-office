@@ -65,7 +65,7 @@ class MemoPdfService extends Component
         $pdf->SetAutoPageBreak(false, 0);
         $pdf->SetFont('freeserif', '', 12);
 
-        $pageCount = $pdf->setSourceFile($sourcePath);
+        $pageCount = PdfNormalizer::setSourceFileWithFallback($pdf, $sourcePath);
         for ($pageNo = 1; $pageNo <= $pageCount; $pageNo++) {
             $templateId = $pdf->importPage($pageNo);
             $size = $pdf->getTemplateSize($templateId);
