@@ -144,28 +144,43 @@ $canForwardAssignment = $identity instanceof User
             && (int) $identity->department_id === (int) $latestAssignment->department_id
         )
     );
-$canCompleteAssignment = $identity instanceof User
-    && $canCompleteDocument
-    && $latestAssignment !== null
-    && (
-        $identity->role === User::ROLE_ADMIN
-        || (
-            $identity->role === User::ROLE_DEPUTY_DIRECTOR
-            && $model->status === Document::STATUS_SUBMITTED_TO_DEPUTY
-        )
-        || (
+$hasSignedByMe = false;
+if ($identity instanceof User) {
+    foreach ($model->workflowActions as $wfAction) {
+        if ((int) $wfAction->actor_id === (int) $identity->id) {
+            $hasSignedByMe = true;
+            break;
+        }
+    }
+}
+$canCompleteAssignment = false;
+if ($identity instanceof User && $canCompleteDocument && $model->status !== Document::STATUS_COMPLETED) {
+    if ($identity->role === User::ROLE_ADMIN || $identity->hasRole(User::ROLE_DIRECTOR)) {
+        $canCompleteAssignment = in_array($model->status, [
+            Document::STATUS_SUBMITTED_TO_DEPUTY,
+            Document::STATUS_SUBMITTED_TO_DIRECTOR,
+            Document::STATUS_ASSIGNED,
+        ], true);
+    } elseif ($identity->role === User::ROLE_DEPUTY_DIRECTOR) {
+        if ($model->status === Document::STATUS_SUBMITTED_TO_DEPUTY) {
+            $canCompleteAssignment = $identity->canGiveDeputyComment($model->department_id);
+        } elseif ($model->status === Document::STATUS_ASSIGNED) {
+            $canCompleteAssignment = $identity->canGiveDeputyComment($model->department_id) || $hasSignedByMe;
+        }
+    } elseif ($model->status === Document::STATUS_ASSIGNED && $latestAssignment !== null) {
+        $canCompleteAssignment = (
             $identity->role === User::ROLE_GENERAL_USER
             && $latestAssignment->assigned_to !== null
             && (int) $latestAssignment->assigned_to === (int) $identity->id
-        )
-        || (
+        ) || (
             $identity->role === User::ROLE_STAFF
             && $latestAssignment->assigned_to === null
             && $identity->department_id !== null
             && $latestAssignment->department_id !== null
             && (int) $identity->department_id === (int) $latestAssignment->department_id
-        )
-    );
+        );
+    }
+}
 $canEditSummary = $identity instanceof User && (
     $identity->hasRole([User::ROLE_ADMIN, User::ROLE_OFFICER, User::ROLE_DIRECTOR])
     || ($identity->role === User::ROLE_DEPUTY_DIRECTOR && $identity->canGiveDeputyComment($model->department_id))
@@ -617,6 +632,24 @@ if ($previewPdfUrl) {
                         ]) ?>
                         <?= Html::submitButton('<i class="bi bi-check2-square" aria-hidden="true"></i><span>บันทึกคำสั่งและมอบหมาย</span>', ['class' => 'btn btn-primary w-100 mt-3']) ?>
                     <?= Html::endForm() ?>
+
+                    <?php if ($canCompleteAssignment): ?>
+                        <hr class="my-3">
+                        <?= Html::beginForm(['complete', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
+                            <?= $csrf ?>
+                            <label class="form-label" for="complete-comment-director">หรือปิดเรื่องทันที (เช่น หนังสือเพื่อทราบ)</label>
+                            <?= Html::textarea('comment', '', [
+                                'id' => 'complete-comment-director',
+                                'class' => 'form-control',
+                                'rows' => 2,
+                                'placeholder' => 'ทราบ / ดำเนินการเรียบร้อยแล้ว',
+                            ]) ?>
+                            <?= Html::submitButton('<i class="bi bi-check-circle me-1" aria-hidden="true"></i><span>ปิดเรื่อง</span>', [
+                                'class' => 'btn btn-success w-100 mt-2',
+                                'data-confirm' => 'ยืนยันปิดเรื่องหนังสือฉบับนี้ทันทีหรือไม่?',
+                            ]) ?>
+                        <?= Html::endForm() ?>
+                    <?php endif; ?>
 
                 <?php elseif ($model->status === Document::STATUS_RETURNED && $canSubmitToApprover): ?>
                     <?php $systemApprover = \common\models\SystemSetting::getDocumentApprover(); ?>

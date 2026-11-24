@@ -346,7 +346,7 @@ class User extends ActiveRecord implements IdentityInterface
 
     public function canCompleteDocument(): bool
     {
-        return $this->hasRole([self::ROLE_DEPUTY_DIRECTOR, self::ROLE_STAFF, self::ROLE_GENERAL_USER]);
+        return $this->hasRole([self::ROLE_DIRECTOR, self::ROLE_DEPUTY_DIRECTOR, self::ROLE_STAFF, self::ROLE_GENERAL_USER]);
     }
 
     public function canForwardDocumentToUser(): bool

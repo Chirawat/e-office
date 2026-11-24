@@ -1,0 +1,23 @@
+# Increase PHP upload limits safely across Apache mod_php and LiteSpeed (lsphp)
+# Wrapped in <IfModule> so PHP-FPM / CGI servers will not trigger HTTP 500 errors.
+
+<IfModule mod_php.c>
+    php_value upload_max_filesize 25M
+    php_value post_max_size 32M
+    php_value memory_limit 256M
+    php_value max_execution_time 120
+</IfModule>
+
+<IfModule mod_php8.c>
+    php_value upload_max_filesize 25M
+    php_value post_max_size 32M
+    php_value memory_limit 256M
+    php_value max_execution_time 120
+</IfModule>
+
+<IfModule lsapi_module>
+    php_value upload_max_filesize 25M
+    php_value post_max_size 32M
+    php_value memory_limit 256M
+    php_value max_execution_time 120
+</IfModule>

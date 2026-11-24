@@ -91,20 +91,24 @@ class DocumentController extends Controller
         // ฐานการนับจำนวนหนังสือสำหรับแต่ละแท็บ
         $countQuery = Document::find();
 
-        if ($identity instanceof User && !$identity->hasRole(User::ROLE_ADMIN)) {
-            if ($identity->hasRole(User::ROLE_DEPUTY_DIRECTOR)) {
-                $deputyStatuses = [
-                    Document::STATUS_SUBMITTED_TO_DEPUTY,
-                    Document::STATUS_SUBMITTED_TO_DIRECTOR,
-                    Document::STATUS_ASSIGNED,
-                    Document::STATUS_COMPLETED,
-                    Document::STATUS_RETURNED,
-                ];
-                $query->andWhere(['{{%document}}.[[status]]' => $deputyStatuses]);
-                $countQuery->andWhere(['{{%document}}.[[status]]' => $deputyStatuses]);
-            } elseif ($identity->hasRole(User::ROLE_DIRECTOR)) {
-                $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
-                $countQuery->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_SUBMITTED_TO_DIRECTOR, Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
+        if ($identity instanceof User && !$identity->hasRole([User::ROLE_ADMIN, User::ROLE_DIRECTOR])) {
+            if ($identity->role === User::ROLE_DEPUTY_DIRECTOR) {
+                // รอง ผอ. / ผู้ช่วย ผอ. (ที่ไม่ได้รักษาการ ผอ.): เห็นหนังสือทั้งหมดในกลุ่มงานที่ตนเองกำกับดูแล
+                $deptIds = $identity->departmentIds();
+                if ($deptIds !== []) {
+                    $deputyScopeCond = [
+                        'or',
+                        ['{{%document}}.[[department_id]]' => $deptIds],
+                        ['{{%document}}.[[department_id]]' => null],
+                        ['{{%document}}.[[approver_id]]' => $identity->id],
+                    ];
+                    $query->andWhere($deputyScopeCond);
+                    $countQuery->andWhere($deputyScopeCond);
+                    $departments = array_values(array_filter(
+                        $departments,
+                        static fn (Department $dept): bool => in_array((int) $dept->id, $deptIds, true)
+                    ));
+                }
             } elseif ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
                 $query->andWhere(['{{%document}}.[[status]]' => [Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED]]);
                 $query->andWhere(['{{%document}}.[[confidentiality]]' => 'normal']);
@@ -203,15 +207,32 @@ class DocumentController extends Controller
         $statuses = $this->myWorkStatuses($identity);
         $keyword = trim((string) Yii::$app->request->get('q_doc', Yii::$app->request->get('q', '')));
         $memoKeyword = trim((string) Yii::$app->request->get('q_memo', ''));
+        $isTopExecutive = $identity->hasRole([User::ROLE_ADMIN, User::ROLE_DIRECTOR]);
         $showMemoWorkbench = true; // เปิดให้ทุกบทบาท (รวมคุณครู/บุคลากรทั่วไป) เข้าถึงบันทึกข้อความของตนเองได้
 
-        // 1. ดึงข้อมูลหนังสือภายนอกที่เกี่ยวข้องกับตนเอง
+        // 1. ดึงข้อมูลหนังสือภายนอกที่เกี่ยวข้องกับตนเอง (งานรอดำเนินการ)
         $docQuery = Document::find()
             ->with(['department', 'originalFile'])
             ->orderBy(['{{%document}}.[[updated_at]]' => SORT_DESC, '{{%document}}.[[id]]' => SORT_DESC]);
 
         if ($identity->hasRole(User::ROLE_ADMIN)) {
             $docQuery->where(['{{%document}}.[[status]]' => $statuses]);
+        } elseif ($identity->role === User::ROLE_DEPUTY_DIRECTOR && !$isTopExecutive) {
+            // รอง ผอ. / ผู้ช่วย ผอ.: แสดงเฉพาะหนังสือรอพิจารณาในกลุ่มงานที่ตนเองกำกับดูแล (หรือที่ตนเป็นผู้ตรวจ)
+            $deptIds = $identity->departmentIds();
+            $deputyPendingCond = ['and', ['{{%document}}.[[status]]' => $statuses]];
+            if ($deptIds !== []) {
+                $deputyPendingCond[] = ['or', ['{{%document}}.[[department_id]]' => $deptIds], ['{{%document}}.[[department_id]]' => null]];
+            }
+            $docQuery->where([
+                'or',
+                $deputyPendingCond,
+                [
+                    'and',
+                    ['{{%document}}.[[status]]' => Document::STATUS_SUBMITTED_TO_APPROVER],
+                    ['{{%document}}.[[approver_id]]' => $identity->id],
+                ],
+            ]);
         } elseif ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
             $assignedScopeQuery = Document::find();
             $this->applyStaffAssignmentScope($assignedScopeQuery, $identity);
@@ -803,21 +824,15 @@ class DocumentController extends Controller
 
     public function actionComplete(int $id): Response
     {
-        $this->requireRole([User::ROLE_DEPUTY_DIRECTOR, User::ROLE_STAFF, User::ROLE_GENERAL_USER], 'เฉพาะรอง ผอ. หรือผู้รับมอบหมายเท่านั้นที่ปิดเรื่องได้');
+        $this->requireRole([User::ROLE_DIRECTOR, User::ROLE_DEPUTY_DIRECTOR, User::ROLE_STAFF, User::ROLE_GENERAL_USER], 'เฉพาะผู้บริหาร หรือผู้รับมอบหมายเท่านั้นที่ปิดเรื่องได้');
 
         $model = $this->findModel($id);
-        $identity = Yii::$app->user->identity;
-        if (
-            !(
-                $model->status === Document::STATUS_ASSIGNED
-                || ($identity instanceof User && $identity->role === User::ROLE_DEPUTY_DIRECTOR && $model->status === Document::STATUS_SUBMITTED_TO_DEPUTY)
-            )
-        ) {
-            Yii::$app->session->setFlash('warning', 'หนังสือไม่ได้อยู่ในสถานะที่สามารถปิดเรื่องได้');
+        if ($model->status === Document::STATUS_COMPLETED) {
+            Yii::$app->session->setFlash('info', 'หนังสือนี้ปิดเรื่องเรียบร้อยแล้ว');
             return $this->redirect(['view', 'id' => $model->id]);
         }
         if (!$this->canCurrentUserCompleteAssignment($model)) {
-            Yii::$app->session->setFlash('warning', 'หนังสือนี้ถูกส่งต่อให้ผู้ปฏิบัติรายอื่นแล้ว');
+            Yii::$app->session->setFlash('warning', 'คุณไม่มีสิทธิ์ปิดเรื่องสำหรับหนังสือในสถานะนี้');
             return $this->redirect(['view', 'id' => $model->id]);
         }
 
@@ -1019,8 +1034,37 @@ class DocumentController extends Controller
         if (!$identity instanceof User || !$identity->canCompleteDocument()) {
             return false;
         }
-        if ($identity->role === User::ROLE_ADMIN) {
-            return true;
+        if ($model->status === Document::STATUS_COMPLETED) {
+            return false;
+        }
+
+        // ผู้ดูแลระบบ, ผอ., หรือผู้รักษาการแทน ผอ. สามารถปิดเรื่องได้ในขั้นรอพิจารณาและมอบหมายแล้ว
+        if ($identity->role === User::ROLE_ADMIN || $identity->hasRole(User::ROLE_DIRECTOR)) {
+            return in_array($model->status, [
+                Document::STATUS_SUBMITTED_TO_DEPUTY,
+                Document::STATUS_SUBMITTED_TO_DIRECTOR,
+                Document::STATUS_ASSIGNED,
+            ], true);
+        }
+
+        // รอง ผอ. / ผู้ช่วย ผอ.: ปิดเรื่องได้ในสถานะรอรอง ผอ. และสถานะมอบหมายแล้ว (ในสายงานหรือหนังสือที่ตนเองเคยลงนาม)
+        if ($identity->role === User::ROLE_DEPUTY_DIRECTOR) {
+            if ($model->status === Document::STATUS_SUBMITTED_TO_DEPUTY) {
+                return $identity->canGiveDeputyComment($model->department_id);
+            }
+            if ($model->status === Document::STATUS_ASSIGNED) {
+                if ($identity->canGiveDeputyComment($model->department_id)) {
+                    return true;
+                }
+                return WorkflowAction::find()
+                    ->where(['document_id' => $model->id, 'actor_id' => $identity->id])
+                    ->exists();
+            }
+            return false;
+        }
+
+        if ($model->status !== Document::STATUS_ASSIGNED) {
+            return false;
         }
 
         $assignment = $this->latestAssignment($model);
