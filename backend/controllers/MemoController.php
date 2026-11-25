@@ -586,7 +586,11 @@ class MemoController extends Controller
             }
         }
 
-        $id = User::find()->select('id')->where(['status' => User::STATUS_ACTIVE, 'role' => $role])->scalar();
+        $id = User::find()
+            ->select('id')
+            ->where(['status' => User::STATUS_ACTIVE, 'role' => $role])
+            ->orderBy([new \yii\db\Expression("CASE WHEN [[line_user_id]] IS NOT NULL AND [[line_user_id]] <> '' THEN 0 ELSE 1 END ASC"), 'id' => SORT_ASC])
+            ->scalar();
         if ($id !== false && $id !== null) {
             return (int) $id;
         }

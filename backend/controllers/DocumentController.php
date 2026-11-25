@@ -592,24 +592,33 @@ class DocumentController extends Controller
         );
         $this->regenerateStampedPdf($model);
 
-        // แจ้งเตือน รอง ผอ. ประจำกลุ่มงาน (กลุ่มงานที่ผู้ตรวจเลือก/ยืนยัน)
-        $deputy = User::find()
-            ->where(['role' => User::ROLE_DEPUTY_DIRECTOR, 'status' => User::STATUS_ACTIVE])
+        // แจ้งเตือน รอง ผอ. / ผู้ช่วย ผอ. ประจำกลุ่มงานทุกคนที่เชื่อม LINE ไว้
+        $deputies = User::find()
+            ->where(['{{%user}}.role' => User::ROLE_DEPUTY_DIRECTOR, '{{%user}}.status' => User::STATUS_ACTIVE])
             ->joinWith('departments')
             ->andWhere(['or',
                 ['{{%user}}.department_id' => $model->department_id],
                 ['user_department.department_id' => $model->department_id],
             ])
-            ->one();
+            ->all();
 
-        if ($deputy instanceof User) {
-            (new LineMessagingService())->notifyDocumentWorkflow(
-                $deputy,
-                $model,
-                $identity,
-                'มีหนังสือรับผ่านการอนุมัติ เสนอถึงท่านเพื่อลงความเห็น',
-                $comment
-            );
+        $lineService = new LineMessagingService();
+        $notifiedIds = [];
+        foreach ($deputies as $deputy) {
+            if ($deputy instanceof User && !isset($notifiedIds[(int) $deputy->id])) {
+                $notifiedIds[(int) $deputy->id] = true;
+                try {
+                    $lineService->notifyDocumentWorkflow(
+                        $deputy,
+                        $model,
+                        $identity,
+                        'มีหนังสือรับผ่านการอนุมัติ เสนอถึงท่านเพื่อลงความเห็น',
+                        $comment
+                    );
+                } catch (\Throwable $e) {
+                    Yii::warning('LINE notify deputy failed: ' . $e->getMessage(), __METHOD__);
+                }
+            }
         }
 
         if ($newDept !== null) {
@@ -713,6 +722,25 @@ class DocumentController extends Controller
         if ($decision === 'return') {
             $this->changeStatus($model, Document::STATUS_RETURNED, 'deputy_return', $comment);
             $this->regenerateStampedPdf($model);
+
+            // แจ้งเตือนผู้ลงทะเบียนหนังสือเมื่อถูกส่งกลับแก้ไข
+            if ($model->created_by !== null && $identity instanceof User) {
+                $creator = User::findOne((int) $model->created_by);
+                if ($creator instanceof User) {
+                    try {
+                        (new LineMessagingService())->notifyDocumentWorkflow(
+                            $creator,
+                            $model,
+                            $identity,
+                            'หนังสือรับถูกส่งกลับให้แก้ไข',
+                            $comment
+                        );
+                    } catch (\Throwable $e) {
+                        Yii::warning('LINE notify creator on deputy return failed: ' . $e->getMessage(), __METHOD__);
+                    }
+                }
+            }
+
             Yii::$app->session->setFlash('success', 'ส่งกลับแก้ไขเรียบร้อยแล้ว');
             return $this->redirect(['view', 'id' => $model->id]);
         }
@@ -720,6 +748,42 @@ class DocumentController extends Controller
         $this->changeStatus($model, Document::STATUS_SUBMITTED_TO_DIRECTOR, 'deputy_comment', $comment);
         $this->saveStamp($model, DocumentStamp::TYPE_DEPUTY_COMMENT, $comment, 170, 128);
         $this->regenerateStampedPdf($model);
+
+        // แจ้งเตือน ผอ. (หรือผู้รักษาการแทน ผอ. หากเปิดโหมดรักษาการ) ผ่าน LINE
+        if ($identity instanceof User) {
+            $directors = [];
+            if (SystemSetting::isActingDirector()) {
+                $actingId = SystemSetting::getActingDirectorUserId();
+                if ($actingId !== null) {
+                    $actingUser = User::findOne(['id' => $actingId, 'status' => User::STATUS_ACTIVE]);
+                    if ($actingUser instanceof User) {
+                        $directors[] = $actingUser;
+                    }
+                }
+            }
+            if ($directors === []) {
+                $directors = User::find()
+                    ->where(['role' => User::ROLE_DIRECTOR, 'status' => User::STATUS_ACTIVE])
+                    ->andWhere(['is not', 'line_user_id', null])
+                    ->andWhere(['<>', 'line_user_id', ''])
+                    ->all();
+            }
+
+            $lineService = new LineMessagingService();
+            foreach ($directors as $director) {
+                try {
+                    $lineService->notifyDocumentWorkflow(
+                        $director,
+                        $model,
+                        $identity,
+                        'มีหนังสือรับเสนอเพื่อพิจารณาสั่งการ',
+                        $comment
+                    );
+                } catch (\Throwable $e) {
+                    Yii::warning('LINE notify director failed: ' . $e->getMessage(), __METHOD__);
+                }
+            }
+        }
 
         Yii::$app->session->setFlash('success', 'บันทึกความเห็นและเสนอ ผอ. เรียบร้อยแล้ว');
         return $this->redirect(['view', 'id' => $model->id]);
