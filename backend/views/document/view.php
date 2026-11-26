@@ -462,31 +462,39 @@ if ($previewPdfUrl) {
                     <div><dt>ความเร่งด่วน</dt><dd><?= Html::encode($urgency) ?></dd></div>
                     <div><dt>กลุ่มงาน</dt><dd><?= Html::encode($model->department->name ?? '-') ?></dd></div>
                     <div><dt>ผู้ตรวจ/อนุมัติ</dt><dd><?= Html::encode($model->approver?->displayName() ?? \common\models\SystemSetting::getDocumentApprover()?->displayName() ?? '-') ?></dd></div>
-                    <div>
-                        <dt>
-                            ผู้ปฏิบัติ
+                    <div class="meta-item-stacked">
+                        <dt class="d-flex justify-content-between align-items-center">
+                            <span>ผู้ปฏิบัติ</span>
                             <?php if ($totalAssignedCount > 0): ?>
-                                <span class="badge <?= $acknowledgedCount === $totalAssignedCount ? 'bg-success' : 'bg-info text-dark' ?> ms-1 fw-normal" style="font-size: 0.7rem;">
-                                    รับทราบ <?= $acknowledgedCount ?>/<?= $totalAssignedCount ?>
+                                <span class="badge <?= $acknowledgedCount === $totalAssignedCount ? 'bg-success' : 'bg-info text-dark' ?> fw-normal" style="font-size: 0.72rem;">
+                                    รับทราบแล้ว <?= $acknowledgedCount ?>/<?= $totalAssignedCount ?> คน
                                 </span>
                             <?php endif; ?>
                         </dt>
-                        <dd>
+                        <dd class="mt-1 mb-0">
                             <?php if ($assignedAssignments !== []): ?>
-                                <div class="d-flex flex-column gap-1">
+                                <ul class="list-unstyled mb-0 d-flex flex-column gap-2">
                                     <?php foreach ($assignedAssignments as $asg): ?>
                                         <?php $assigneeName = $asg->assignedTo?->displayName() ?? ('ผู้ใช้ #' . $asg->assigned_to); ?>
-                                        <div class="d-flex align-items-center justify-content-between gap-2 py-1 px-2 rounded-1 border <?= $asg->isAcknowledged() ? 'bg-success-subtle border-success-subtle' : 'bg-light' ?>" style="font-size: 0.8rem;">
-                                            <span class="fw-semibold <?= $asg->isAcknowledged() ? 'text-success' : 'text-dark' ?>">
-                                                <i class="bi <?= $asg->isAcknowledged() ? 'bi-check-circle-fill text-success' : 'bi-hourglass-split text-warning' ?> me-1"></i>
-                                                <?= Html::encode($assigneeName) ?>
+                                        <li class="py-2 px-2 rounded-2 border <?= $asg->isAcknowledged() ? 'bg-success-subtle border-success-subtle' : 'bg-light' ?>">
+                                            <span class="d-flex align-items-start gap-2">
+                                                <i class="bi <?= $asg->isAcknowledged() ? 'bi-check-circle-fill text-success' : 'bi-hourglass-split text-warning' ?> flex-shrink-0" style="margin-top: 2px;"></i>
+                                                <span class="d-block flex-grow-1" style="min-width: 0;">
+                                                    <span class="d-block fw-semibold <?= $asg->isAcknowledged() ? 'text-success' : 'text-dark' ?>" style="font-size: 0.84rem; line-height: 1.35;">
+                                                        <?= Html::encode($assigneeName) ?>
+                                                    </span>
+                                                    <span class="d-block text-muted mt-1" style="font-size: 0.74rem; line-height: 1.25;">
+                                                        <?php if ($asg->isAcknowledged()): ?>
+                                                            <i class="bi bi-clock me-1"></i>รับทราบเมื่อ <?= Html::encode($formatThaiDateTime($asg->acknowledged_at ? (int) $asg->acknowledged_at : null)) ?>
+                                                        <?php else: ?>
+                                                            <i class="bi bi-clock-history me-1"></i>รอรับทราบ
+                                                        <?php endif; ?>
+                                                    </span>
+                                                </span>
                                             </span>
-                                            <span class="text-muted" style="font-size: 0.72rem; white-space: nowrap;">
-                                                <?= $asg->isAcknowledged() ? 'รับทราบ ' . Html::encode($formatThaiDateTime($asg->acknowledged_at ? (int) $asg->acknowledged_at : null)) : 'รอรับทราบ' ?>
-                                            </span>
-                                        </div>
+                                        </li>
                                     <?php endforeach; ?>
-                                </div>
+                                </ul>
                             <?php else: ?>
                                 -
                             <?php endif; ?>
@@ -1057,7 +1065,7 @@ if ($previewPdfUrl) {
                                 <time><?= Html::encode($thaiDateTime($action->created_at)) ?></time>
                                 <p><?= Html::encode($action->comment ?: $action->action) ?></p>
                                 <?php if ($action->actor): ?>
-                                    <span>โดย <?= Html::encode($action->actor->username) ?></span>
+                                    <span>โดย <?= Html::encode($action->actor->displayName()) ?></span>
                                 <?php endif; ?>
                             </div>
                         </li>

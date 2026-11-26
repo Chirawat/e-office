@@ -1535,23 +1535,23 @@ body {
     margin: 0;
 }
 
-.meta-list div {
+.meta-list > div {
     display: grid;
     grid-template-columns: 128px 1fr;
     gap: 12px;
 }
 
-.meta-list div.meta-item-stacked {
+.meta-list > div.meta-item-stacked {
     display: flex;
     flex-direction: column;
     gap: 4px;
 }
 
-.meta-list div.meta-item-stacked dt {
+.meta-list > div.meta-item-stacked > dt {
     width: 100%;
 }
 
-.meta-list div.meta-item-stacked dd {
+.meta-list > div.meta-item-stacked > dd {
     width: 100%;
 }
 
