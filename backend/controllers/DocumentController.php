@@ -1213,7 +1213,12 @@ class DocumentController extends Controller
             return [Document::STATUS_SUBMITTED_TO_DIRECTOR];
         }
 
-        if ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER) {
+        if ($identity->role === User::ROLE_GENERAL_USER) {
+            // ผู้ใช้ทั่วไป/ครู: คงหนังสือที่ได้รับมอบหมายไว้ในหน้า my แม้เปิดอ่านรับทราบ/ปิดเรื่องแล้ว เพื่อให้ง่ายต่อการค้นหา
+            return [Document::STATUS_ASSIGNED, Document::STATUS_COMPLETED];
+        }
+
+        if ($identity->role === User::ROLE_STAFF) {
             return [Document::STATUS_ASSIGNED];
         }
 
@@ -1363,11 +1368,16 @@ class DocumentController extends Controller
 
     private function applyStaffAssignmentScope($query, User $identity): void
     {
-        $conditions = [[
-            'and',
-            ['document_assignment.assigned_to' => $identity->id],
-            ['document_assignment.status' => DocumentAssignment::STATUS_PENDING],
-        ]];
+        if ($identity->role === User::ROLE_GENERAL_USER) {
+            // ครู/ผู้ใช้ทั่วไป: แสดงทั้งหนังสือที่ยังไม่อ่าน (pending) และที่เปิดอ่านรับทราบแล้ว (acknowledged) เพื่อให้ค้นหาย้อนหลังได้ง่าย
+            $conditions = [['document_assignment.assigned_to' => $identity->id]];
+        } else {
+            $conditions = [[
+                'and',
+                ['document_assignment.assigned_to' => $identity->id],
+                ['document_assignment.status' => DocumentAssignment::STATUS_PENDING],
+            ]];
+        }
 
         if ($identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
             $conditions[] = [
