@@ -424,6 +424,9 @@ class DocumentController extends Controller
         $identity = Yii::$app->user->identity;
         if ($identity instanceof User) {
             DocumentRead::markAsRead($model->id, (int) $identity->id);
+            if ($this->autoAcknowledgeAssignment($model, $identity)) {
+                $model = $this->findModel($id);
+            }
         }
 
         $staffQuery = User::find()
@@ -879,7 +882,7 @@ class DocumentController extends Controller
 
     public function actionComplete(int $id): Response
     {
-        $this->requireRole([User::ROLE_DIRECTOR, User::ROLE_DEPUTY_DIRECTOR, User::ROLE_STAFF, User::ROLE_GENERAL_USER], 'เฉพาะผู้บริหาร หรือผู้รับมอบหมายเท่านั้นที่ปิดเรื่องได้');
+        $this->requireRole([User::ROLE_DIRECTOR, User::ROLE_DEPUTY_DIRECTOR, User::ROLE_STAFF], 'เฉพาะผู้บริหาร หรือหัวหน้ากลุ่มงานเท่านั้นที่ปิดเรื่องได้');
 
         $model = $this->findModel($id);
         if ($model->status === Document::STATUS_COMPLETED) {
@@ -1184,13 +1187,6 @@ class DocumentController extends Controller
             return false;
         }
 
-        // ผู้ปฏิบัติที่ได้รับมอบหมายตรง (รองรับหลายคนพร้อมกัน และข้ามกลุ่มงาน)
-        foreach ($assignments as $assignment) {
-            if ($assignment->assigned_to !== null && (int) $assignment->assigned_to === (int) $identity->id) {
-                return true;
-            }
-        }
-
         // หัวหน้ากลุ่มงาน: ปิดเรื่องได้หากยังไม่มีการระบุตัวผู้ปฏิบัติและเอกสารอยู่ในกลุ่มงานของตน
         if ($identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
             foreach ($assignments as $assignment) {
@@ -1247,7 +1243,11 @@ class DocumentController extends Controller
 
     private function applyStaffAssignmentScope($query, User $identity): void
     {
-        $conditions = [['document_assignment.assigned_to' => $identity->id]];
+        $conditions = [[
+            'and',
+            ['document_assignment.assigned_to' => $identity->id],
+            ['document_assignment.status' => DocumentAssignment::STATUS_PENDING],
+        ]];
 
         if ($identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
             $conditions[] = [
@@ -1262,6 +1262,81 @@ class DocumentController extends Controller
         $query->joinWith('assignments')
             ->andWhere($conditions)
             ->distinct();
+    }
+
+    /**
+     * บันทึกการ "รับทราบ" โดยอัตโนมัติเมื่อผู้ปฏิบัติที่ได้รับมอบหมายเปิดอ่านเอกสารครั้งแรก
+     */
+    private function autoAcknowledgeAssignment(Document $model, User $identity): bool
+    {
+        $now = time();
+        $updated = false;
+
+        foreach ($model->assignments as $assignment) {
+            if ($assignment->assigned_to !== null && (int) $assignment->assigned_to === (int) $identity->id && !$assignment->isAcknowledged()) {
+                $assignment->status = DocumentAssignment::STATUS_ACKNOWLEDGED;
+                $assignment->acknowledged_at = $now;
+                $assignment->save(false, ['status', 'acknowledged_at', 'updated_at']);
+                $updated = true;
+            }
+        }
+
+        if (!$updated) {
+            return false;
+        }
+
+        try {
+            (new WorkflowAction([
+                'document_id' => $model->id,
+                'actor_id' => $identity->id,
+                'action' => 'acknowledge',
+                'from_status' => $model->status,
+                'to_status' => $model->status,
+                'comment' => 'เปิดอ่านและรับทราบเอกสารแล้ว',
+                'created_at' => $now,
+            ]))->save(false);
+            $this->saveAudit(
+                $model,
+                'document.acknowledged',
+                $identity->displayName() . ' เปิดอ่านและรับทราบเอกสารแล้ว',
+                false
+            );
+
+            // หากผู้ปฏิบัติที่ได้รับมอบหมายทุกคนเปิดอ่านรับทราบครบแล้ว ให้เปลี่ยนสถานะหนังสือเป็นปิดเรื่อง/รับทราบครบแล้วอัตโนมัติ
+            if ($model->status === Document::STATUS_ASSIGNED) {
+                $personalAssignments = DocumentAssignment::find()
+                    ->where(['document_id' => $model->id])
+                    ->andWhere(['is not', 'assigned_to', null])
+                    ->all();
+                if ($personalAssignments !== []) {
+                    $allAcknowledged = true;
+                    foreach ($personalAssignments as $pa) {
+                        if (!$pa->isAcknowledged()) {
+                            $allAcknowledged = false;
+                            break;
+                        }
+                    }
+                    if ($allAcknowledged) {
+                        $model->status = Document::STATUS_COMPLETED;
+                        $model->updated_by = $identity->id;
+                        $model->save(false, ['status', 'updated_by', 'updated_at']);
+                        (new WorkflowAction([
+                            'document_id' => $model->id,
+                            'actor_id' => $identity->id,
+                            'action' => 'complete',
+                            'from_status' => Document::STATUS_ASSIGNED,
+                            'to_status' => Document::STATUS_COMPLETED,
+                            'comment' => 'ผู้ปฏิบัติทุกคนรับทราบเอกสารครบแล้ว',
+                            'created_at' => $now,
+                        ]))->save(false);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Yii::warning('Auto-acknowledge logging failed: ' . $e->getMessage(), __METHOD__);
+        }
+
+        return true;
     }
 
     private function applyMemoWorkbenchScope($query, User $identity): void

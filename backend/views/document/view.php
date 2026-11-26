@@ -128,7 +128,9 @@ $canCompleteDocument = $identity instanceof User && $identity->canCompleteDocume
 $canForwardDocument = $identity instanceof User && $identity->canForwardDocumentToUser();
 $latestAssignment = null;
 $assignedUserIds = [];
-$assignedUsers = [];
+$assignedAssignments = [];
+$myAssignment = null;
+$acknowledgedCount = 0;
 foreach ($model->assignments as $assignment) {
     if ($latestAssignment === null || (int) $assignment->id > (int) $latestAssignment->id) {
         $latestAssignment = $assignment;
@@ -137,12 +139,28 @@ foreach ($model->assignments as $assignment) {
         $uid = (int) $assignment->assigned_to;
         if (!in_array($uid, $assignedUserIds, true)) {
             $assignedUserIds[] = $uid;
-            if ($assignment->assignedTo !== null) {
-                $assignedUsers[] = $assignment->assignedTo;
+            $assignedAssignments[] = $assignment;
+            if ($assignment->isAcknowledged()) {
+                $acknowledgedCount++;
             }
+        }
+        if ($identity instanceof User && $uid === (int) $identity->id) {
+            $myAssignment = $assignment;
         }
     }
 }
+$totalAssignedCount = count($assignedAssignments);
+
+$formatThaiDateTime = static function (?int $timestamp): string {
+    if ($timestamp === null || $timestamp <= 0) {
+        return '-';
+    }
+    $months = [1 => 'ม.ค.', 2 => 'ก.พ.', 3 => 'มี.ค.', 4 => 'เม.ย.', 5 => 'พ.ค.', 6 => 'มิ.ย.', 7 => 'ก.ค.', 8 => 'ส.ค.', 9 => 'ก.ย.', 10 => 'ต.ค.', 11 => 'พ.ย.', 12 => 'ธ.ค.'];
+    $day = (int) date('j', $timestamp);
+    $month = $months[(int) date('n', $timestamp)] ?? '';
+    $year = (int) date('Y', $timestamp) + 543;
+    return "{$day} {$month} {$year} เวลา " . date('H:i', $timestamp) . ' น.';
+};
 
 $canForwardAssignment = false;
 if ($identity instanceof User && $canForwardDocument && $model->status === Document::STATUS_ASSIGNED) {
@@ -189,9 +207,7 @@ if ($identity instanceof User && $canCompleteDocument && $model->status !== Docu
             $canCompleteAssignment = $identity->canGiveDeputyComment($model->department_id) || $hasSignedByMe;
         }
     } elseif ($model->status === Document::STATUS_ASSIGNED) {
-        if (in_array((int) $identity->id, $assignedUserIds, true)) {
-            $canCompleteAssignment = true;
-        } elseif ($identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
+        if ($identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
             foreach ($model->assignments as $assignment) {
                 if (
                     $assignment->assigned_to === null
@@ -445,14 +461,28 @@ if ($previewPdfUrl) {
                     <div><dt>กลุ่มงาน</dt><dd><?= Html::encode($model->department->name ?? '-') ?></dd></div>
                     <div><dt>ผู้ตรวจ/อนุมัติ</dt><dd><?= Html::encode($model->approver?->displayName() ?? \common\models\SystemSetting::getDocumentApprover()?->displayName() ?? '-') ?></dd></div>
                     <div>
-                        <dt>ผู้ปฏิบัติ</dt>
+                        <dt>
+                            ผู้ปฏิบัติ
+                            <?php if ($totalAssignedCount > 0): ?>
+                                <span class="badge <?= $acknowledgedCount === $totalAssignedCount ? 'bg-success' : 'bg-info text-dark' ?> ms-1 fw-normal" style="font-size: 0.7rem;">
+                                    รับทราบ <?= $acknowledgedCount ?>/<?= $totalAssignedCount ?>
+                                </span>
+                            <?php endif; ?>
+                        </dt>
                         <dd>
-                            <?php if ($assignedUsers !== []): ?>
-                                <div class="d-flex flex-wrap gap-1">
-                                    <?php foreach ($assignedUsers as $assignee): ?>
-                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-normal">
-                                            <?= Html::encode($assignee->displayName()) ?>
-                                        </span>
+                            <?php if ($assignedAssignments !== []): ?>
+                                <div class="d-flex flex-column gap-1">
+                                    <?php foreach ($assignedAssignments as $asg): ?>
+                                        <?php $assigneeName = $asg->assignedTo?->displayName() ?? ('ผู้ใช้ #' . $asg->assigned_to); ?>
+                                        <div class="d-flex align-items-center justify-content-between gap-2 py-1 px-2 rounded-1 border <?= $asg->isAcknowledged() ? 'bg-success-subtle border-success-subtle' : 'bg-light' ?>" style="font-size: 0.8rem;">
+                                            <span class="fw-semibold <?= $asg->isAcknowledged() ? 'text-success' : 'text-dark' ?>">
+                                                <i class="bi <?= $asg->isAcknowledged() ? 'bi-check-circle-fill text-success' : 'bi-hourglass-split text-warning' ?> me-1"></i>
+                                                <?= Html::encode($assigneeName) ?>
+                                            </span>
+                                            <span class="text-muted" style="font-size: 0.72rem; white-space: nowrap;">
+                                                <?= $asg->isAcknowledged() ? 'รับทราบ ' . Html::encode($formatThaiDateTime($asg->acknowledged_at ? (int) $asg->acknowledged_at : null)) : 'รอรับทราบ' ?>
+                                            </span>
+                                        </div>
                                     <?php endforeach; ?>
                                 </div>
                             <?php else: ?>
@@ -872,7 +902,17 @@ if ($previewPdfUrl) {
                     <?php endif; ?>
 
                 <?php else: ?>
-                    <p class="muted-text">ไม่มีรายการที่ต้องดำเนินการสำหรับบทบาทของคุณในสถานะนี้</p>
+                    <?php if ($myAssignment !== null && $myAssignment->isAcknowledged()): ?>
+                        <div class="alert alert-success d-flex align-items-start gap-2 mb-0" style="font-size: 0.88rem;">
+                            <i class="bi bi-check-circle-fill fs-5 text-success mt-1"></i>
+                            <div>
+                                <strong>ท่านรับทราบเอกสารนี้แล้ว</strong><br>
+                                <span class="small text-muted">บันทึกเวลารับทราบอัตโนมัติเมื่อ: <?= Html::encode($formatThaiDateTime($myAssignment->acknowledged_at ? (int) $myAssignment->acknowledged_at : null)) ?></span>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <p class="muted-text">ไม่มีรายการที่ต้องดำเนินการสำหรับบทบาทของคุณในสถานะนี้</p>
+                    <?php endif; ?>
                 <?php endif; ?>
 
                 <?php if ($canDeleteDocument): ?>

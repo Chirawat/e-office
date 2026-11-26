@@ -10,6 +10,9 @@ use yii\db\ActiveRecord;
 
 class DocumentAssignment extends ActiveRecord
 {
+    public const STATUS_PENDING = 'pending';
+    public const STATUS_ACKNOWLEDGED = 'acknowledged';
+
     public static function tableName(): string
     {
         return '{{%document_assignment}}';
@@ -26,11 +29,16 @@ class DocumentAssignment extends ActiveRecord
     {
         return [
             [['document_id'], 'required'],
-            [['document_id', 'department_id', 'assigned_to', 'assigned_by'], 'integer'],
+            [['document_id', 'department_id', 'assigned_to', 'assigned_by', 'acknowledged_at'], 'integer'],
             [['instruction'], 'string'],
             [['due_date'], 'safe'],
             [['status'], 'string', 'max' => 40],
         ];
+    }
+
+    public function isAcknowledged(): bool
+    {
+        return $this->status === self::STATUS_ACKNOWLEDGED || $this->acknowledged_at !== null;
     }
 
     public function getDocument(): ActiveQuery
