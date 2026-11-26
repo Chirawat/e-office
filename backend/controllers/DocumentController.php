@@ -427,19 +427,10 @@ class DocumentController extends Controller
         }
 
         $staffQuery = User::find()
-            ->where(['status' => User::STATUS_ACTIVE, 'role' => [User::ROLE_GENERAL_USER, User::ROLE_OFFICER]])
+            ->with(['department'])
+            ->where(['status' => User::STATUS_ACTIVE])
+            ->andWhere(['role' => [User::ROLE_GENERAL_USER, User::ROLE_OFFICER, User::ROLE_STAFF]])
             ->orderBy([new \yii\db\Expression("COALESCE(NULLIF(fullname, ''), username) ASC")]);
-
-        $targetDeptId = ($identity instanceof User && $identity->role === User::ROLE_STAFF) ? $identity->department_id : $model->department_id;
-        if ($targetDeptId !== null) {
-            $staffQuery->leftJoin('user_department', 'user_department.user_id = {{%user}}.id')
-                ->andWhere([
-                    'or',
-                    ['{{%user}}.department_id' => $targetDeptId],
-                    ['user_department.department_id' => $targetDeptId],
-                ])
-                ->distinct();
-        }
 
         return $this->render('view', [
             'model' => $model,
@@ -927,41 +918,84 @@ class DocumentController extends Controller
             return $this->redirect(['view', 'id' => $model->id]);
         }
 
-        $assignedTo = (int) Yii::$app->request->post('assigned_to');
+        $rawAssigned = Yii::$app->request->post('assigned_to', []);
+        $assignedIds = array_values(array_unique(array_filter(
+            array_map('intval', is_array($rawAssigned) ? $rawAssigned : [$rawAssigned]),
+            static fn (int $uid): bool => $uid > 0
+        )));
         $instruction = trim((string) Yii::$app->request->post('instruction'));
-        $staff = User::find()
+
+        if ($assignedIds === []) {
+            Yii::$app->session->setFlash('error', 'กรุณาเลือกผู้ปฏิบัติอย่างน้อย 1 คน');
+            return $this->redirect(['view', 'id' => $model->id]);
+        }
+
+        $staffList = User::find()
             ->with('departments')
-            ->where(['id' => $assignedTo, 'status' => User::STATUS_ACTIVE, 'role' => [User::ROLE_GENERAL_USER, User::ROLE_OFFICER]])
-            ->one();
-        if ($staff === null) {
+            ->where([
+                'id' => $assignedIds,
+                'status' => User::STATUS_ACTIVE,
+                'role' => [User::ROLE_GENERAL_USER, User::ROLE_OFFICER, User::ROLE_STAFF],
+            ])
+            ->all();
+
+        if ($staffList === []) {
             Yii::$app->session->setFlash('error', 'กรุณาเลือกผู้ปฏิบัติที่ยังใช้งานอยู่');
             return $this->redirect(['view', 'id' => $model->id]);
         }
+
         $identity = Yii::$app->user->identity;
-        if (
-            $identity instanceof User
-            && $identity->department_id !== null
-            && !$staff->belongsToDepartment($identity->department_id)
-        ) {
-            Yii::$app->session->setFlash('error', 'เลือกผู้ปฏิบัติได้เฉพาะกลุ่มงานเดียวกัน');
-            return $this->redirect(['view', 'id' => $model->id]);
+        $selectedStaffById = [];
+        foreach ($staffList as $staffUser) {
+            $selectedStaffById[(int) $staffUser->id] = $staffUser;
         }
+        $selectedIds = array_keys($selectedStaffById);
+        $newlyAssignedStaff = [];
 
         $transaction = Yii::$app->db->beginTransaction();
         try {
-            $assignment = $this->latestAssignment($model) ?? new DocumentAssignment([
-                'document_id' => $model->id,
-                'department_id' => $model->department_id,
-                'status' => 'pending',
-            ]);
-            $assignment->assigned_to = $staff->id;
-            $assignment->assigned_by = Yii::$app->user->id;
-            if ($instruction !== '') {
-                $assignment->instruction = $instruction;
+            $existingByUserId = [];
+            foreach ($model->assignments as $existing) {
+                if ($existing->assigned_to === null) {
+                    // ลบแถว placeholder ของกลุ่มงานเมื่อมีการระบุตัวผู้ปฏิบัติแล้ว
+                    $existing->delete();
+                    continue;
+                }
+                $uid = (int) $existing->assigned_to;
+                if (!in_array($uid, $selectedIds, true)) {
+                    // เอาผู้ปฏิบัติที่ถูกยกเลิกการเลือกออก
+                    $existing->delete();
+                    continue;
+                }
+                $existingByUserId[$uid] = $existing;
             }
-            $assignment->save(false);
 
-            $comment = 'ส่งต่อให้ผู้ปฏิบัติ: ' . $staff->username . ($instruction !== '' ? ' - ' . $instruction : '');
+            foreach ($selectedStaffById as $uid => $staffUser) {
+                if (isset($existingByUserId[$uid])) {
+                    $assignment = $existingByUserId[$uid];
+                    $assignment->assigned_by = Yii::$app->user->id;
+                    if ($instruction !== '') {
+                        $assignment->instruction = $instruction;
+                    }
+                    $assignment->save(false);
+                } else {
+                    $assignment = new DocumentAssignment([
+                        'document_id' => $model->id,
+                        'department_id' => $staffUser->department_id ?: $model->department_id,
+                        'assigned_to' => $uid,
+                        'assigned_by' => Yii::$app->user->id,
+                        'instruction' => $instruction !== '' ? $instruction : null,
+                        'status' => 'pending',
+                        'due_date' => $model->due_date,
+                    ]);
+                    $assignment->save(false);
+                    $newlyAssignedStaff[] = $staffUser;
+                }
+            }
+
+            $staffNames = array_map(static fn (User $u): string => $u->displayName(), $staffList);
+            $comment = 'ส่งต่อให้ผู้ปฏิบัติ (' . count($staffNames) . ' คน): ' . implode(', ', $staffNames)
+                . ($instruction !== '' ? ' - ' . $instruction : '');
             (new WorkflowAction([
                 'document_id' => $model->id,
                 'actor_id' => Yii::$app->user->id,
@@ -979,15 +1013,20 @@ class DocumentController extends Controller
             throw $e;
         }
 
-        try {
-            if ($identity instanceof User) {
-                (new LineMessagingService())->notifyAssignedDocument($staff, $model, $identity, $instruction);
+        // แจ้งเตือนผ่าน LINE (แจ้งคนที่เพิ่มใหม่ทุกคน หรือทุกคนที่เลือกหากเป็นการส่งใหม่)
+        $notifyTargets = $newlyAssignedStaff !== [] ? $newlyAssignedStaff : $staffList;
+        if ($identity instanceof User) {
+            $lineService = new LineMessagingService();
+            foreach ($notifyTargets as $targetUser) {
+                try {
+                    $lineService->notifyAssignedDocument($targetUser, $model, $identity, $instruction);
+                } catch (\Throwable $e) {
+                    Yii::warning('LINE notify assigned staff failed (user_id=' . $targetUser->id . '): ' . $e->getMessage(), __METHOD__);
+                }
             }
-        } catch (\Throwable $e) {
-            Yii::warning($e, __METHOD__);
         }
 
-        Yii::$app->session->setFlash('success', 'ส่งต่อหนังสือให้ผู้ปฏิบัติเรียบร้อยแล้ว');
+        Yii::$app->session->setFlash('success', 'ส่งต่อหนังสือให้ผู้ปฏิบัติ ' . count($staffList) . ' คน เรียบร้อยแล้ว');
         return $this->redirect(['view', 'id' => $model->id]);
     }
 
@@ -1082,14 +1121,23 @@ class DocumentController extends Controller
             return $model->status === Document::STATUS_SUBMITTED_TO_DEPUTY;
         }
 
-        $assignment = $this->latestAssignment($model);
-        if ($assignment === null) {
+        if ($identity->department_id === null) {
             return false;
         }
+        if ($model->department_id !== null && (int) $model->department_id === (int) $identity->department_id) {
+            return true;
+        }
 
-        return $identity->department_id !== null
-            && $assignment->department_id !== null
-            && (int) $assignment->department_id === (int) $identity->department_id;
+        foreach ($model->assignments as $assignment) {
+            if ($assignment->department_id !== null && (int) $assignment->department_id === (int) $identity->department_id) {
+                return true;
+            }
+            if ($assignment->assigned_by !== null && (int) $assignment->assigned_by === (int) $identity->id) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function canCurrentUserCompleteAssignment(Document $model): bool
@@ -1131,20 +1179,32 @@ class DocumentController extends Controller
             return false;
         }
 
-        $assignment = $this->latestAssignment($model);
-        if ($assignment === null) {
+        $assignments = $model->assignments;
+        if ($assignments === []) {
             return false;
         }
 
-        if ($identity->role === User::ROLE_GENERAL_USER) {
-            return $assignment->assigned_to !== null && (int) $assignment->assigned_to === (int) $identity->id;
+        // ผู้ปฏิบัติที่ได้รับมอบหมายตรง (รองรับหลายคนพร้อมกัน และข้ามกลุ่มงาน)
+        foreach ($assignments as $assignment) {
+            if ($assignment->assigned_to !== null && (int) $assignment->assigned_to === (int) $identity->id) {
+                return true;
+            }
         }
 
-        return $identity->role === User::ROLE_STAFF
-            && $assignment->assigned_to === null
-            && $identity->department_id !== null
-            && $assignment->department_id !== null
-            && (int) $assignment->department_id === (int) $identity->department_id;
+        // หัวหน้ากลุ่มงาน: ปิดเรื่องได้หากยังไม่มีการระบุตัวผู้ปฏิบัติและเอกสารอยู่ในกลุ่มงานของตน
+        if ($identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
+            foreach ($assignments as $assignment) {
+                if (
+                    $assignment->assigned_to === null
+                    && $assignment->department_id !== null
+                    && (int) $assignment->department_id === (int) $identity->department_id
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function latestAssignment(Document $model): ?DocumentAssignment
@@ -1268,13 +1328,18 @@ class DocumentController extends Controller
             return true;
         }
 
-        // กรณีมอบหมายถึงกลุ่มงานของตนเอง
-        $assignment = $this->latestAssignment($model);
-        if ($assignment !== null
-            && $identity->department_id !== null
-            && $assignment->department_id !== null
-            && (int) $assignment->department_id === (int) $identity->department_id) {
-            return true;
+        // กรณีมอบหมายถึงตนเองหรือกลุ่มงานของตนเอง (รองรับหลายคนและข้ามกลุ่มงาน)
+        foreach ($model->assignments as $assignment) {
+            if ($assignment->assigned_to !== null && (int) $assignment->assigned_to === (int) $identity->id) {
+                return true;
+            }
+            if (
+                $identity->department_id !== null
+                && $assignment->department_id !== null
+                && (int) $assignment->department_id === (int) $identity->department_id
+            ) {
+                return true;
+            }
         }
 
         // กรณีหนังสือภายนอกทั่วไป (ชั้นความลับปกติ) ที่อยู่ในสถานะเผยแพร่/สั่งการแล้ว อนุญาตให้บุคลากรทุกคนเปิดดูได้

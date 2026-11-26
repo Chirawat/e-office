@@ -127,23 +127,44 @@ $canGiveDirectorOrder = $identity instanceof User && $identity->canGiveDirectorO
 $canCompleteDocument = $identity instanceof User && $identity->canCompleteDocument();
 $canForwardDocument = $identity instanceof User && $identity->canForwardDocumentToUser();
 $latestAssignment = null;
+$assignedUserIds = [];
+$assignedUsers = [];
 foreach ($model->assignments as $assignment) {
     if ($latestAssignment === null || (int) $assignment->id > (int) $latestAssignment->id) {
         $latestAssignment = $assignment;
     }
+    if ($assignment->assigned_to !== null) {
+        $uid = (int) $assignment->assigned_to;
+        if (!in_array($uid, $assignedUserIds, true)) {
+            $assignedUserIds[] = $uid;
+            if ($assignment->assignedTo !== null) {
+                $assignedUsers[] = $assignment->assignedTo;
+            }
+        }
+    }
 }
-$canForwardAssignment = $identity instanceof User
-    && $canForwardDocument
-    && $latestAssignment !== null
-    && (
-        $identity->role === User::ROLE_ADMIN
-        || (
-            $identity->role === User::ROLE_STAFF
-            && $identity->department_id !== null
-            && $latestAssignment->department_id !== null
-            && (int) $identity->department_id === (int) $latestAssignment->department_id
-        )
-    );
+
+$canForwardAssignment = false;
+if ($identity instanceof User && $canForwardDocument && $model->status === Document::STATUS_ASSIGNED) {
+    if ($identity->role === User::ROLE_ADMIN) {
+        $canForwardAssignment = true;
+    } elseif ($identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
+        if ($model->department_id !== null && (int) $model->department_id === (int) $identity->department_id) {
+            $canForwardAssignment = true;
+        } else {
+            foreach ($model->assignments as $assignment) {
+                if (
+                    ($assignment->department_id !== null && (int) $assignment->department_id === (int) $identity->department_id)
+                    || ($assignment->assigned_by !== null && (int) $assignment->assigned_by === (int) $identity->id)
+                ) {
+                    $canForwardAssignment = true;
+                    break;
+                }
+            }
+        }
+    }
+}
+
 $hasSignedByMe = false;
 if ($identity instanceof User) {
     foreach ($model->workflowActions as $wfAction) {
@@ -167,20 +188,37 @@ if ($identity instanceof User && $canCompleteDocument && $model->status !== Docu
         } elseif ($model->status === Document::STATUS_ASSIGNED) {
             $canCompleteAssignment = $identity->canGiveDeputyComment($model->department_id) || $hasSignedByMe;
         }
-    } elseif ($model->status === Document::STATUS_ASSIGNED && $latestAssignment !== null) {
-        $canCompleteAssignment = (
-            $identity->role === User::ROLE_GENERAL_USER
-            && $latestAssignment->assigned_to !== null
-            && (int) $latestAssignment->assigned_to === (int) $identity->id
-        ) || (
-            $identity->role === User::ROLE_STAFF
-            && $latestAssignment->assigned_to === null
-            && $identity->department_id !== null
-            && $latestAssignment->department_id !== null
-            && (int) $identity->department_id === (int) $latestAssignment->department_id
-        );
+    } elseif ($model->status === Document::STATUS_ASSIGNED) {
+        if (in_array((int) $identity->id, $assignedUserIds, true)) {
+            $canCompleteAssignment = true;
+        } elseif ($identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
+            foreach ($model->assignments as $assignment) {
+                if (
+                    $assignment->assigned_to === null
+                    && $assignment->department_id !== null
+                    && (int) $assignment->department_id === (int) $identity->department_id
+                ) {
+                    $canCompleteAssignment = true;
+                    break;
+                }
+            }
+        }
     }
 }
+
+// จัดกลุ่มบุคลากรตามกลุ่มสาระการเรียนรู้สำหรับการเลือกมอบหมาย (รองรับข้ามกลุ่มงานและเลือกหลายคน)
+$staffGroupedByArea = [];
+foreach (array_keys(User::learningAreaOptions()) as $areaKey) {
+    $staffGroupedByArea[$areaKey] = [];
+}
+$staffGroupedByArea['ยังไม่ระบุกลุ่มสาระ'] = [];
+foreach ($staffUsers as $staffUser) {
+    $areaKey = !empty($staffUser->learning_area) && isset($staffGroupedByArea[$staffUser->learning_area])
+        ? $staffUser->learning_area
+        : 'ยังไม่ระบุกลุ่มสาระ';
+    $staffGroupedByArea[$areaKey][] = $staffUser;
+}
+$staffGroupedByArea = array_filter($staffGroupedByArea, static fn (array $list): bool => $list !== []);
 $canEditSummary = $identity instanceof User && (
     $identity->hasRole([User::ROLE_ADMIN, User::ROLE_OFFICER, User::ROLE_DIRECTOR])
     || ($identity->role === User::ROLE_DEPUTY_DIRECTOR && $identity->canGiveDeputyComment($model->department_id))
@@ -406,7 +444,22 @@ if ($previewPdfUrl) {
                     <div><dt>ความเร่งด่วน</dt><dd><?= Html::encode($urgency) ?></dd></div>
                     <div><dt>กลุ่มงาน</dt><dd><?= Html::encode($model->department->name ?? '-') ?></dd></div>
                     <div><dt>ผู้ตรวจ/อนุมัติ</dt><dd><?= Html::encode($model->approver?->displayName() ?? \common\models\SystemSetting::getDocumentApprover()?->displayName() ?? '-') ?></dd></div>
-                    <div><dt>ผู้ปฏิบัติ</dt><dd><?= Html::encode($latestAssignment?->assignedTo?->displayName() ?? '-') ?></dd></div>
+                    <div>
+                        <dt>ผู้ปฏิบัติ</dt>
+                        <dd>
+                            <?php if ($assignedUsers !== []): ?>
+                                <div class="d-flex flex-wrap gap-1">
+                                    <?php foreach ($assignedUsers as $assignee): ?>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle fw-normal">
+                                            <?= Html::encode($assignee->displayName()) ?>
+                                        </span>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php else: ?>
+                                -
+                            <?php endif; ?>
+                        </dd>
+                    </div>
                     <div><dt>ครบกำหนด</dt><dd><?= $model->due_date ? Yii::$app->formatter->asDate($model->due_date) : '-' ?></dd></div>
                 </dl>
             </section>
@@ -687,14 +740,52 @@ if ($previewPdfUrl) {
 
                 <?php elseif ($model->status === Document::STATUS_ASSIGNED && ($canForwardAssignment || $canCompleteAssignment)): ?>
                     <?php if ($canForwardAssignment): ?>
-                        <?= Html::beginForm(['forward-to-staff', 'id' => $model->id], 'post', ['class' => 'action-form']) ?>
+                        <?= Html::beginForm(['forward-to-staff', 'id' => $model->id], 'post', ['class' => 'action-form', 'id' => 'forward-staff-form']) ?>
                             <?= $csrf ?>
-                            <label class="form-label" for="assigned-to">ส่งต่อให้ผู้ปฏิบัติ</label>
-                            <?= Html::dropDownList('assigned_to', $latestAssignment?->assigned_to, $staffItems, [
-                                'id' => 'assigned-to',
-                                'class' => 'form-select',
-                                'prompt' => 'เลือกผู้ปฏิบัติ',
-                            ]) ?>
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <label class="form-label mb-0 fw-semibold">ส่งต่อให้ผู้ปฏิบัติ (เลือกได้หลายคน / ข้ามกลุ่มงานได้)</label>
+                                <span class="badge bg-primary rounded-pill" id="selected-staff-count">เลือกแล้ว <?= count($assignedUserIds) ?> คน</span>
+                            </div>
+
+                            <div class="input-group input-group-sm mb-2">
+                                <span class="input-group-text bg-light"><i class="bi bi-search text-muted"></i></span>
+                                <input type="text" class="form-control" id="staff-search-input" placeholder="ค้นหาชื่อบุคลากร หรือกลุ่มสาระฯ...">
+                                <button type="button" class="btn btn-outline-secondary" id="btn-clear-staff-selection" title="ล้างที่เลือกทั้งหมด">ล้าง</button>
+                            </div>
+
+                            <div class="border rounded-2 bg-white p-2" id="staff-area-picker" style="max-height: 300px; overflow-y: auto;">
+                                <?php foreach ($staffGroupedByArea as $areaTitle => $members): ?>
+                                    <?php $groupKey = 'area_' . md5($areaTitle); ?>
+                                    <div class="staff-area-group mb-2 pb-1 border-bottom" data-area-name="<?= Html::encode(mb_strtolower($areaTitle, 'UTF-8')) ?>">
+                                        <div class="d-flex align-items-center justify-content-between bg-light px-2 py-1 rounded-1 mb-1">
+                                            <span class="small fw-bold text-primary">
+                                                <i class="bi bi-book me-1"></i><?= Html::encode(str_replace('กลุ่มสาระการเรียนรู้', 'กลุ่มสาระฯ ', $areaTitle)) ?>
+                                                <span class="text-muted fw-normal">(<?= count($members) ?>)</span>
+                                            </span>
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none btn-toggle-area-group" data-group="<?= $groupKey ?>" style="font-size: 0.72rem;">เลือกทั้งกลุ่ม</button>
+                                        </div>
+                                        <div class="ps-1">
+                                            <?php foreach ($members as $staffUser): ?>
+                                                <?php
+                                                $isChecked = in_array((int) $staffUser->id, $assignedUserIds, true);
+                                                $deptSuffix = $staffUser->department ? $staffUser->department->name : '';
+                                                $searchText = mb_strtolower($staffUser->displayName() . ' ' . $staffUser->username . ' ' . $deptSuffix . ' ' . $areaTitle, 'UTF-8');
+                                                ?>
+                                                <label class="form-check d-flex align-items-center gap-2 py-1 px-1 mb-0 rounded staff-member-item" data-search="<?= Html::encode($searchText) ?>" style="cursor: pointer; font-size: 0.84rem;">
+                                                    <input class="form-check-input mt-0 staff-checkbox" type="checkbox" name="assigned_to[]" value="<?= (int) $staffUser->id ?>" data-group="<?= $groupKey ?>" <?= $isChecked ? 'checked' : '' ?>>
+                                                    <span class="text-dark flex-grow-1">
+                                                        <?= Html::encode($staffUser->displayName()) ?>
+                                                        <?php if ($deptSuffix !== ''): ?>
+                                                            <span class="text-muted" style="font-size: 0.74rem;">(<?= Html::encode($deptSuffix) ?>)</span>
+                                                        <?php endif; ?>
+                                                    </span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+
                             <label class="form-label mt-3" for="forward-instruction">คำสั่ง/หมายเหตุถึงผู้ปฏิบัติ</label>
                             <?= Html::textarea('instruction', $latestAssignment?->instruction ?? '', [
                                 'id' => 'forward-instruction',
@@ -702,8 +793,68 @@ if ($previewPdfUrl) {
                                 'rows' => 3,
                                 'placeholder' => 'ดำเนินการตามคำสั่งและรายงานผล',
                             ]) ?>
-                            <?= Html::submitButton('<i class="bi bi-person-check" aria-hidden="true"></i><span>ส่งต่อให้ผู้ปฏิบัติ</span>', ['class' => 'btn btn-outline-primary w-100 mt-3']) ?>
+                            <?= Html::submitButton('<i class="bi bi-person-check me-1" aria-hidden="true"></i><span>ส่งต่อให้ผู้ปฏิบัติที่เลือก</span>', ['class' => 'btn btn-outline-primary w-100 mt-3']) ?>
                         <?= Html::endForm() ?>
+                        <?php
+                        $this->registerJs(<<<'JS'
+                        (function() {
+                            var picker = document.getElementById('staff-area-picker');
+                            if (!picker) return;
+                            var searchInput = document.getElementById('staff-search-input');
+                            var countBadge = document.getElementById('selected-staff-count');
+                            var clearBtn = document.getElementById('btn-clear-staff-selection');
+
+                            function updateCount() {
+                                var checked = picker.querySelectorAll('.staff-checkbox:checked').length;
+                                if (countBadge) {
+                                    countBadge.textContent = 'เลือกแล้ว ' + checked + ' คน';
+                                }
+                            }
+
+                            picker.addEventListener('change', function(e) {
+                                if (e.target && e.target.classList.contains('staff-checkbox')) {
+                                    updateCount();
+                                }
+                            });
+
+                            picker.querySelectorAll('.btn-toggle-area-group').forEach(function(btn) {
+                                btn.addEventListener('click', function() {
+                                    var grp = btn.getAttribute('data-group');
+                                    var boxes = Array.prototype.slice.call(picker.querySelectorAll('.staff-checkbox[data-group="' + grp + '"]'))
+                                        .filter(function(cb) { return cb.closest('.staff-member-item').style.display !== 'none'; });
+                                    var allChecked = boxes.length > 0 && boxes.every(function(cb) { return cb.checked; });
+                                    boxes.forEach(function(cb) { cb.checked = !allChecked; });
+                                    updateCount();
+                                });
+                            });
+
+                            if (clearBtn) {
+                                clearBtn.addEventListener('click', function() {
+                                    picker.querySelectorAll('.staff-checkbox:checked').forEach(function(cb) { cb.checked = false; });
+                                    updateCount();
+                                });
+                            }
+
+                            if (searchInput) {
+                                searchInput.addEventListener('input', function() {
+                                    var q = searchInput.value.trim().toLowerCase();
+                                    picker.querySelectorAll('.staff-area-group').forEach(function(groupEl) {
+                                        var anyVisible = false;
+                                        groupEl.querySelectorAll('.staff-member-item').forEach(function(itemEl) {
+                                            var hay = itemEl.getAttribute('data-search') || '';
+                                            var show = (q === '' || hay.indexOf(q) !== -1);
+                                            itemEl.style.display = show ? '' : 'none';
+                                            if (show) anyVisible = true;
+                                        });
+                                        groupEl.style.display = anyVisible ? '' : 'none';
+                                    });
+                                });
+                            }
+
+                            updateCount();
+                        })();
+                        JS);
+                        ?>
                     <?php endif; ?>
 
                     <?php if ($canCompleteAssignment): ?>
