@@ -891,15 +891,46 @@ class DocumentController extends Controller
 
         $this->regenerateStampedPdf($model);
 
-        // หากมีผู้ปฏิบัติที่รอง ผอ. กำหนดไว้ล่วงหน้า ให้แจ้งเตือนผ่าน LINE ทันทีหลัง ผอ. สั่งการ
+        // แจ้งเตือนผ่าน LINE หลัง ผอ. สั่งการ:
+        // - กรณีรอง ผอ. กำหนดผู้ปฏิบัติไว้ล่วงหน้า -> แจ้งผู้ปฏิบัติเหล่านั้นทันที
+        // - กรณีมอบหมายเข้ากลุ่มงาน -> แจ้งหัวหน้ากลุ่มงาน (ROLE_STAFF) ประจำกลุ่มงานนั้นทุกคนที่ผูก LINE ไว้
         $identity = Yii::$app->user->identity;
-        if ($preAssignedUsers !== [] && $identity instanceof User) {
+        if ($identity instanceof User) {
             $lineService = new LineMessagingService();
-            foreach ($preAssignedUsers as $targetUser) {
-                try {
-                    $lineService->notifyAssignedDocument($targetUser, $model, $identity, $comment);
-                } catch (\Throwable $e) {
-                    Yii::warning('LINE notify pre-assigned staff failed (user_id=' . $targetUser->id . '): ' . $e->getMessage(), __METHOD__);
+            if ($preAssignedUsers !== []) {
+                foreach ($preAssignedUsers as $targetUser) {
+                    try {
+                        $lineService->notifyAssignedDocument($targetUser, $model, $identity, $comment);
+                    } catch (\Throwable $e) {
+                        Yii::warning('LINE notify pre-assigned staff failed (user_id=' . $targetUser->id . '): ' . $e->getMessage(), __METHOD__);
+                    }
+                }
+            } else {
+                $assignedDeptId = $departmentId ?: $model->department_id;
+                if ($assignedDeptId !== null && $assignedDeptId !== '') {
+                    $deptHeads = User::find()
+                        ->where(['{{%user}}.role' => User::ROLE_STAFF, '{{%user}}.status' => User::STATUS_ACTIVE])
+                        ->andWhere(['is not', '{{%user}}.line_user_id', null])
+                        ->andWhere(['<>', '{{%user}}.line_user_id', ''])
+                        ->joinWith('departments')
+                        ->andWhere([
+                            'or',
+                            ['{{%user}}.department_id' => (int) $assignedDeptId],
+                            ['user_department.department_id' => (int) $assignedDeptId],
+                        ])
+                        ->all();
+
+                    $notifiedHeadIds = [];
+                    foreach ($deptHeads as $deptHead) {
+                        if ($deptHead instanceof User && !isset($notifiedHeadIds[(int) $deptHead->id])) {
+                            $notifiedHeadIds[(int) $deptHead->id] = true;
+                            try {
+                                $lineService->notifyAssignedDocument($deptHead, $model, $identity, $comment);
+                            } catch (\Throwable $e) {
+                                Yii::warning('LINE notify department head failed (user_id=' . $deptHead->id . '): ' . $e->getMessage(), __METHOD__);
+                            }
+                        }
+                    }
                 }
             }
         }
