@@ -351,7 +351,7 @@ class User extends ActiveRecord implements IdentityInterface
 
     public function canForwardDocumentToUser(): bool
     {
-        return $this->hasRole([self::ROLE_STAFF]);
+        return $this->hasRole([self::ROLE_STAFF, self::ROLE_DEPUTY_DIRECTOR]);
     }
 
     /**

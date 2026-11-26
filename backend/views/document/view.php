@@ -162,10 +162,22 @@ $formatThaiDateTime = static function (?int $timestamp): string {
     return "{$day} {$month} {$year} เวลา " . date('H:i', $timestamp) . ' น.';
 };
 
+$hasSignedByMe = false;
+if ($identity instanceof User) {
+    foreach ($model->workflowActions as $wfAction) {
+        if ((int) $wfAction->actor_id === (int) $identity->id) {
+            $hasSignedByMe = true;
+            break;
+        }
+    }
+}
+
 $canForwardAssignment = false;
 if ($identity instanceof User && $canForwardDocument && $model->status === Document::STATUS_ASSIGNED) {
     if ($identity->role === User::ROLE_ADMIN) {
         $canForwardAssignment = true;
+    } elseif ($identity->role === User::ROLE_DEPUTY_DIRECTOR) {
+        $canForwardAssignment = $identity->canGiveDeputyComment($model->department_id) || $hasSignedByMe;
     } elseif ($identity->role === User::ROLE_STAFF && $identity->department_id !== null) {
         if ($model->department_id !== null && (int) $model->department_id === (int) $identity->department_id) {
             $canForwardAssignment = true;
@@ -179,16 +191,6 @@ if ($identity instanceof User && $canForwardDocument && $model->status === Docum
                     break;
                 }
             }
-        }
-    }
-}
-
-$hasSignedByMe = false;
-if ($identity instanceof User) {
-    foreach ($model->workflowActions as $wfAction) {
-        if ((int) $wfAction->actor_id === (int) $identity->id) {
-            $hasSignedByMe = true;
-            break;
         }
     }
 }
@@ -652,10 +654,124 @@ if ($previewPdfUrl) {
                             <?= Html::textarea('comment', '', [
                                 'id' => 'deputy-comment',
                                 'class' => 'form-control',
-                                'rows' => 5,
+                                'rows' => 4,
                                 'placeholder' => 'เห็นควรประชาสัมพันธ์และมอบกลุ่มงานที่เกี่ยวข้องดำเนินการ',
                             ]) ?>
-                            <div class="action-buttons">
+
+                            <!-- ตัวเลือกกำหนดผู้ปฏิบัติงานล่วงหน้า (ไม่บังคับ) -->
+                            <div class="mt-3 p-2 border rounded-2 bg-light">
+                                <div class="d-flex align-items-center justify-content-between gap-2">
+                                    <span class="small fw-semibold text-primary">
+                                        <i class="bi bi-person-plus-fill me-1"></i>กำหนดผู้ปฏิบัติงานล่วงหน้า (ไม่บังคับ)
+                                    </span>
+                                    <span class="badge bg-primary rounded-pill" id="deputy-selected-staff-count">เลือกแล้ว <?= count($assignedUserIds) ?> คน</span>
+                                </div>
+                                <div class="text-muted mt-1" style="font-size: 0.74rem;">
+                                    เว้นว่างไว้เพื่อให้หัวหน้ากลุ่มงานมอบหมาย หรือเลือกผู้ปฏิบัติไว้ล่วงหน้าเพื่อให้หนังสือส่งตรงถึงผู้ปฏิบัติทันทีหลัง ผอ. สั่งการ
+                                </div>
+
+                                <div class="mt-2" id="deputy-preassign-box">
+                                    <div class="input-group input-group-sm mb-2">
+                                        <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                                        <input type="text" class="form-control" id="deputy-staff-search-input" placeholder="ค้นหาชื่อบุคลากร หรือกลุ่มสาระฯ...">
+                                        <button type="button" class="btn btn-outline-secondary" id="btn-clear-deputy-staff">ล้าง</button>
+                                    </div>
+                                    <div class="border rounded-2 bg-white p-2" id="deputy-staff-area-picker" style="max-height: 260px; overflow-y: auto;">
+                                        <?php foreach ($staffGroupedByArea as $areaTitle => $members): ?>
+                                            <?php $groupKey = 'deputy_area_' . md5($areaTitle); ?>
+                                            <div class="staff-area-group mb-2 pb-1 border-bottom">
+                                                <div class="d-flex align-items-center justify-content-between bg-light px-2 py-1 rounded-1 mb-1">
+                                                    <span class="small fw-bold text-primary">
+                                                        <i class="bi bi-book me-1"></i><?= Html::encode(str_replace('กลุ่มสาระการเรียนรู้', 'กลุ่มสาระฯ ', $areaTitle)) ?>
+                                                        <span class="text-muted fw-normal">(<?= count($members) ?>)</span>
+                                                    </span>
+                                                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none btn-toggle-area-group" data-group="<?= $groupKey ?>" style="font-size: 0.72rem;">เลือกทั้งกลุ่ม</button>
+                                                </div>
+                                                <div class="ps-1">
+                                                    <?php foreach ($members as $staffUser): ?>
+                                                        <?php
+                                                        $isChecked = in_array((int) $staffUser->id, $assignedUserIds, true);
+                                                        $deptSuffix = $staffUser->department ? $staffUser->department->name : '';
+                                                        $searchText = mb_strtolower($staffUser->displayName() . ' ' . $staffUser->username . ' ' . $deptSuffix . ' ' . $areaTitle, 'UTF-8');
+                                                        ?>
+                                                        <label class="form-check d-flex align-items-center gap-2 py-1 px-1 mb-0 rounded staff-member-item" data-search="<?= Html::encode($searchText) ?>" style="cursor: pointer; font-size: 0.84rem;">
+                                                            <input class="form-check-input mt-0 staff-checkbox" type="checkbox" name="assigned_to[]" value="<?= (int) $staffUser->id ?>" data-group="<?= $groupKey ?>" <?= $isChecked ? 'checked' : '' ?>>
+                                                            <span class="text-dark flex-grow-1">
+                                                                <?= Html::encode($staffUser->displayName()) ?>
+                                                                <?php if ($deptSuffix !== ''): ?>
+                                                                    <span class="text-muted" style="font-size: 0.74rem;">(<?= Html::encode($deptSuffix) ?>)</span>
+                                                                <?php endif; ?>
+                                                            </span>
+                                                        </label>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php
+                            $this->registerJs(<<<'JS'
+                            (function() {
+                                var picker = document.getElementById('deputy-staff-area-picker');
+                                if (!picker) return;
+                                var searchInput = document.getElementById('deputy-staff-search-input');
+                                var countBadge = document.getElementById('deputy-selected-staff-count');
+                                var clearBtn = document.getElementById('btn-clear-deputy-staff');
+
+                                function updateCount() {
+                                    var checked = picker.querySelectorAll('.staff-checkbox:checked').length;
+                                    if (countBadge) {
+                                        countBadge.textContent = 'เลือกแล้ว ' + checked + ' คน';
+                                    }
+                                }
+
+                                picker.addEventListener('change', function(e) {
+                                    if (e.target && e.target.classList.contains('staff-checkbox')) {
+                                        updateCount();
+                                    }
+                                });
+
+                                picker.querySelectorAll('.btn-toggle-area-group').forEach(function(btn) {
+                                    btn.addEventListener('click', function() {
+                                        var grp = btn.getAttribute('data-group');
+                                        var boxes = Array.prototype.slice.call(picker.querySelectorAll('.staff-checkbox[data-group="' + grp + '"]'))
+                                            .filter(function(cb) { return cb.closest('.staff-member-item').style.display !== 'none'; });
+                                        var allChecked = boxes.length > 0 && boxes.every(function(cb) { return cb.checked; });
+                                        boxes.forEach(function(cb) { cb.checked = !allChecked; });
+                                        updateCount();
+                                    });
+                                });
+
+                                if (clearBtn) {
+                                    clearBtn.addEventListener('click', function() {
+                                        picker.querySelectorAll('.staff-checkbox:checked').forEach(function(cb) { cb.checked = false; });
+                                        updateCount();
+                                    });
+                                }
+
+                                if (searchInput) {
+                                    searchInput.addEventListener('input', function() {
+                                        var q = searchInput.value.trim().toLowerCase();
+                                        picker.querySelectorAll('.staff-area-group').forEach(function(groupEl) {
+                                            var anyVisible = false;
+                                            groupEl.querySelectorAll('.staff-member-item').forEach(function(itemEl) {
+                                                var hay = itemEl.getAttribute('data-search') || '';
+                                                var show = (q === '' || hay.indexOf(q) !== -1);
+                                                itemEl.style.display = show ? '' : 'none';
+                                                if (show) anyVisible = true;
+                                            });
+                                            groupEl.style.display = anyVisible ? '' : 'none';
+                                        });
+                                    });
+                                }
+
+                                updateCount();
+                            })();
+                            JS);
+                            ?>
+
+                            <div class="action-buttons mt-3">
                                 <?= Html::submitButton('<i class="bi bi-send-check" aria-hidden="true"></i><span>เสนอ ผอ.</span>', [
                                     'class' => 'btn btn-primary',
                                     'name' => 'decision',

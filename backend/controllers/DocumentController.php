@@ -743,6 +743,45 @@ class DocumentController extends Controller
         $this->saveStamp($model, DocumentStamp::TYPE_DEPUTY_COMMENT, $comment, 170, 128);
         $this->regenerateStampedPdf($model);
 
+        // หากรอง ผอ. / ผู้ช่วย ผอ. เลือกผู้ปฏิบัติงานไว้ล่วงหน้า ให้บันทึกเตรียมไว้ (จะส่งถึงผู้ปฏิบัติและแจ้งเตือน LINE ทันทีหลัง ผอ. สั่งการ)
+        $rawPreAssigned = Yii::$app->request->post('assigned_to', []);
+        $preAssignedIds = array_values(array_unique(array_filter(
+            array_map('intval', is_array($rawPreAssigned) ? $rawPreAssigned : [$rawPreAssigned]),
+            static fn (int $uid): bool => $uid > 0
+        )));
+        if ($preAssignedIds !== []) {
+            $preStaffList = User::find()
+                ->where([
+                    'id' => $preAssignedIds,
+                    'status' => User::STATUS_ACTIVE,
+                    'role' => [User::ROLE_GENERAL_USER, User::ROLE_OFFICER, User::ROLE_STAFF],
+                ])
+                ->all();
+            if ($preStaffList !== []) {
+                // ล้างรายการมอบหมายเดิม (ถ้ามี) แล้วบันทึกรายชื่อผู้ปฏิบัติที่รอง ผอ. กำหนดไว้
+                DocumentAssignment::deleteAll(['document_id' => $model->id]);
+                $preNames = [];
+                foreach ($preStaffList as $preStaff) {
+                    (new DocumentAssignment([
+                        'document_id' => $model->id,
+                        'department_id' => $preStaff->department_id ?: $model->department_id,
+                        'assigned_to' => (int) $preStaff->id,
+                        'assigned_by' => Yii::$app->user->id,
+                        'instruction' => $comment,
+                        'status' => DocumentAssignment::STATUS_PENDING,
+                        'due_date' => $model->due_date,
+                    ]))->save(false);
+                    $preNames[] = $preStaff->displayName();
+                }
+                $this->saveAudit(
+                    $model,
+                    'document.deputy_pre_assigned',
+                    'รอง ผอ. กำหนดผู้ปฏิบัติล่วงหน้า (' . count($preNames) . ' คน): ' . implode(', ', $preNames),
+                    false
+                );
+            }
+        }
+
         // แจ้งเตือน ผอ. (หรือผู้รักษาการแทน ผอ. หากเปิดโหมดรักษาการ) ผ่าน LINE
         if ($identity instanceof User) {
             $directors = [];
@@ -802,19 +841,44 @@ class DocumentController extends Controller
             return $this->redirect(['view', 'id' => $model->id]);
         }
 
+        $preAssignedUsers = [];
         $transaction = Yii::$app->db->beginTransaction();
         try {
             $this->changeStatus($model, Document::STATUS_ASSIGNED, 'director_order', $comment, false);
 
-            $assignment = new DocumentAssignment([
-                'document_id' => $model->id,
-                'department_id' => $departmentId ?: $model->department_id,
-                'assigned_by' => Yii::$app->user->id,
-                'instruction' => $comment,
-                'status' => 'pending',
-                'due_date' => $dueDate,
-            ]);
-            $assignment->save(false);
+            // ตรวจสอบว่ารอง ผอ. / ผู้ช่วย ผอ. ได้กำหนดผู้ปฏิบัติงานไว้ล่วงหน้าแล้วหรือไม่
+            $existingPersonalAssignments = DocumentAssignment::find()
+                ->with('assignedTo')
+                ->where(['document_id' => $model->id])
+                ->andWhere(['is not', 'assigned_to', null])
+                ->all();
+
+            if ($existingPersonalAssignments !== []) {
+                // มีผู้ปฏิบัติที่รอง ผอ. กำหนดไว้แล้ว -> ส่งตรงถึงผู้ปฏิบัติทันทีโดยไม่ต้องรอหัวหน้ากลุ่มงาน
+                foreach ($existingPersonalAssignments as $asg) {
+                    $asg->due_date = $dueDate;
+                    if ($asg->instruction !== null && $asg->instruction !== '' && $asg->instruction !== $comment) {
+                        $asg->instruction = $comment . ' (' . $asg->instruction . ')';
+                    } else {
+                        $asg->instruction = $comment;
+                    }
+                    $asg->save(false, ['due_date', 'instruction', 'updated_at']);
+                    if ($asg->assignedTo instanceof User) {
+                        $preAssignedUsers[] = $asg->assignedTo;
+                    }
+                }
+            } else {
+                // รอง ผอ. เว้นว่างไว้ -> มอบหมายไปยังกลุ่มงานเพื่อให้หัวหน้ากลุ่มงาน (หรือรอง ผอ.) ส่งต่อผู้ปฏิบัติ
+                $assignment = new DocumentAssignment([
+                    'document_id' => $model->id,
+                    'department_id' => $departmentId ?: $model->department_id,
+                    'assigned_by' => Yii::$app->user->id,
+                    'instruction' => $comment,
+                    'status' => DocumentAssignment::STATUS_PENDING,
+                    'due_date' => $dueDate,
+                ]);
+                $assignment->save(false);
+            }
 
             $this->saveStamp($model, DocumentStamp::TYPE_DIRECTOR_ORDER, $comment, 230, 132, false);
             $this->saveAudit($model, 'document.assigned', 'ผอ. สั่งการและมอบหมายงาน', false);
@@ -826,6 +890,20 @@ class DocumentController extends Controller
         }
 
         $this->regenerateStampedPdf($model);
+
+        // หากมีผู้ปฏิบัติที่รอง ผอ. กำหนดไว้ล่วงหน้า ให้แจ้งเตือนผ่าน LINE ทันทีหลัง ผอ. สั่งการ
+        $identity = Yii::$app->user->identity;
+        if ($preAssignedUsers !== [] && $identity instanceof User) {
+            $lineService = new LineMessagingService();
+            foreach ($preAssignedUsers as $targetUser) {
+                try {
+                    $lineService->notifyAssignedDocument($targetUser, $model, $identity, $comment);
+                } catch (\Throwable $e) {
+                    Yii::warning('LINE notify pre-assigned staff failed (user_id=' . $targetUser->id . '): ' . $e->getMessage(), __METHOD__);
+                }
+            }
+        }
+
         Yii::$app->session->setFlash('success', 'บันทึกคำสั่งและมอบหมายงานเรียบร้อยแล้ว');
         return $this->redirect(['view', 'id' => $model->id]);
     }
@@ -909,7 +987,7 @@ class DocumentController extends Controller
 
     public function actionForwardToStaff(int $id): Response
     {
-        $this->requireRole([User::ROLE_STAFF], 'เฉพาะเจ้าหน้าที่/กลุ่มงานเท่านั้นที่ส่งต่อผู้ปฏิบัติได้');
+        $this->requireRole([User::ROLE_STAFF, User::ROLE_DEPUTY_DIRECTOR], 'เฉพาะหัวหน้ากลุ่มงาน หรือรอง ผอ./ผู้ช่วย ผอ. เท่านั้นที่ส่งต่อผู้ปฏิบัติได้');
 
         $model = $this->findModel($id);
         if ($model->status !== Document::STATUS_ASSIGNED) {
@@ -1121,7 +1199,18 @@ class DocumentController extends Controller
             return true;
         }
         if ($identity->role === User::ROLE_DEPUTY_DIRECTOR) {
-            return $model->status === Document::STATUS_SUBMITTED_TO_DEPUTY;
+            if ($model->status === Document::STATUS_SUBMITTED_TO_DEPUTY) {
+                return $identity->canGiveDeputyComment($model->department_id);
+            }
+            if ($model->status === Document::STATUS_ASSIGNED) {
+                if ($identity->canGiveDeputyComment($model->department_id)) {
+                    return true;
+                }
+                return WorkflowAction::find()
+                    ->where(['document_id' => $model->id, 'actor_id' => $identity->id])
+                    ->exists();
+            }
+            return false;
         }
 
         if ($identity->department_id === null) {
@@ -1269,6 +1358,10 @@ class DocumentController extends Controller
      */
     private function autoAcknowledgeAssignment(Document $model, User $identity): bool
     {
+        if ($model->status !== Document::STATUS_ASSIGNED) {
+            return false;
+        }
+
         $now = time();
         $updated = false;
 
