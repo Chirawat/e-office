@@ -71,6 +71,10 @@ class DocumentController extends Controller
         $keyword = trim((string) Yii::$app->request->get('q', ''));
         $departmentId = Yii::$app->request->get('department_id');
         $departmentId = ($departmentId !== null && $departmentId !== '') ? (int) $departmentId : null;
+        $statusFilter = trim((string) Yii::$app->request->get('status', ''));
+        if ($statusFilter !== '' && !array_key_exists($statusFilter, Document::statusOptions())) {
+            $statusFilter = '';
+        }
         $identity = Yii::$app->user->identity;
 
         $myAssignedDocIds = [];
@@ -133,7 +137,45 @@ class DocumentController extends Controller
             $countQuery->andWhere($searchCond);
         }
 
-        // คำนวณจำนวนหนังสือรวมทั้งหมด
+        // คำนวณจำนวนหนังสือตามสถานะ (ภายใต้ขอบเขตสิทธิ์ + กลุ่มงานที่เลือก + คำค้นหา)
+        $statusCountQuery = clone $query;
+        $statusCounts = [];
+        $statusCountRows = $statusCountQuery
+            ->select(['{{%document}}.[[status]]', 'COUNT(*) AS cnt'])
+            ->groupBy('{{%document}}.[[status]]')
+            ->asArray()
+            ->all();
+        foreach ($statusCountRows as $row) {
+            if (!empty($row['status'])) {
+                $statusCounts[(string) $row['status']] = (int) $row['cnt'];
+            }
+        }
+        $statusTotalInView = array_sum($statusCounts);
+
+        // กำหนดรายการสถานะที่ให้กรองได้ตามบทบาท
+        $allStatusOptions = Document::statusOptions();
+        if (
+            $identity instanceof User
+            && !$identity->hasRole([User::ROLE_ADMIN, User::ROLE_DIRECTOR])
+            && ($identity->role === User::ROLE_STAFF || $identity->role === User::ROLE_GENERAL_USER)
+        ) {
+            $availableStatuses = array_intersect_key($allStatusOptions, array_flip([
+                Document::STATUS_ASSIGNED,
+                Document::STATUS_COMPLETED,
+            ]));
+        } else {
+            $availableStatuses = $allStatusOptions;
+        }
+
+        // คัดกรองตามสถานะหากมีการเลือกตัวกรองสถานะ
+        if ($statusFilter !== '') {
+            $query->andWhere(['{{%document}}.[[status]]' => $statusFilter]);
+        }
+
+        // คำนวณจำนวนหนังสือรวมทั้งหมด (ตามสถานะที่เลือกด้วยถ้ามี)
+        if ($statusFilter !== '') {
+            $countQuery->andWhere(['{{%document}}.[[status]]' => $statusFilter]);
+        }
         $countAll = (int) (clone $countQuery)->count();
 
         // คำนวณจำนวนหนังสือของแต่ละกลุ่มงาน
@@ -187,6 +229,10 @@ class DocumentController extends Controller
             'dataProvider' => $dataProvider,
             'keyword' => $keyword,
             'departmentId' => $departmentId,
+            'statusFilter' => $statusFilter,
+            'availableStatuses' => $availableStatuses,
+            'statusCounts' => $statusCounts,
+            'statusTotalInView' => $statusTotalInView,
             'departments' => $departments,
             'countAll' => $countAll,
             'deptCounts' => $deptCounts,

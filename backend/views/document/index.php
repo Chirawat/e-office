@@ -13,6 +13,10 @@ use yii\helpers\Url;
 /** @var yii\data\ActiveDataProvider $dataProvider */
 /** @var string $keyword */
 /** @var int|null $departmentId */
+/** @var string|null $statusFilter */
+/** @var array<string, string>|null $availableStatuses */
+/** @var array<string, int>|null $statusCounts */
+/** @var int|null $statusTotalInView */
 /** @var Department[] $departments */
 /** @var int $countAll */
 /** @var array<int, int> $deptCounts */
@@ -24,6 +28,10 @@ use yii\helpers\Url;
 $unreadCountAll = $unreadCountAll ?? $countAll;
 $unreadDeptCounts = $unreadDeptCounts ?? $deptCounts;
 $readDocMap = $readDocMap ?? [];
+$statusFilter = $statusFilter ?? '';
+$availableStatuses = $availableStatuses ?? Document::statusOptions();
+$statusCounts = $statusCounts ?? [];
+$statusTotalInView = $statusTotalInView ?? $countAll;
 
 $this->title = 'ทะเบียนหนังสือเข้า';
 $this->params['breadcrumbs'][] = $this->title;
@@ -212,13 +220,20 @@ $pagination = $dataProvider->getPagination();
         </h1>
     </div>
 
-    <!-- ส่วนค้นหาหนังสือ (Compact Search Bar) -->
+    <!-- ส่วนค้นหาและกรองสถานะหนังสือ (Compact Search & Status Filter Bar) -->
+    <?php
+    $statusDropdownItems = ['' => 'ทุกสถานะ (' . $statusTotalInView . ')'];
+    foreach ($availableStatuses as $stKey => $stLabel) {
+        $stCount = $statusCounts[$stKey] ?? 0;
+        $statusDropdownItems[$stKey] = $stLabel . ' (' . $stCount . ')';
+    }
+    ?>
     <div class="content-card p-2 mb-3 bg-white border shadow-sm">
-        <?= Html::beginForm(['index'], 'get', ['class' => 'd-flex align-items-center gap-2']) ?>
+        <?= Html::beginForm(['index'], 'get', ['class' => 'd-flex align-items-center flex-wrap gap-2', 'id' => 'document-filter-form']) ?>
             <?php if ($departmentId !== null): ?>
                 <?= Html::hiddenInput('department_id', (string) $departmentId) ?>
             <?php endif; ?>
-            <div class="input-group input-group-sm flex-grow-1">
+            <div class="input-group input-group-sm flex-grow-1" style="min-width: 200px;">
                 <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-search"></i></span>
                 <?= Html::textInput('q', $keyword, [
                     'id' => 'document-search',
@@ -226,9 +241,17 @@ $pagination = $dataProvider->getPagination();
                     'placeholder' => 'ค้นหาจากชื่อเรื่อง, เลขที่หนังสือ, หรือเลขรับ...',
                 ]) ?>
             </div>
+            <div style="min-width: 175px;">
+                <?= Html::dropDownList('status', $statusFilter, $statusDropdownItems, [
+                    'id' => 'document-status-filter',
+                    'class' => 'form-select form-select-sm',
+                    'aria-label' => 'กรองตามสถานะเอกสาร',
+                    'onchange' => 'this.form.submit();',
+                ]) ?>
+            </div>
             <button type="submit" class="btn btn-sm btn-primary py-1 px-3 fw-semibold">ค้นหา</button>
-            <?php if ($keyword !== ''): ?>
-                <a href="<?= Url::to(['index', 'department_id' => $departmentId]) ?>" class="btn btn-sm btn-outline-secondary py-1 px-2" title="ล้างการค้นหา">
+            <?php if ($keyword !== '' || $statusFilter !== ''): ?>
+                <a href="<?= Url::to(['index', 'department_id' => $departmentId]) ?>" class="btn btn-sm btn-outline-secondary py-1 px-2" title="ล้างตัวกรองทั้งหมด">
                     <i class="bi bi-x-lg"></i>
                 </a>
             <?php endif; ?>
@@ -242,7 +265,7 @@ $pagination = $dataProvider->getPagination();
             <ul class="nav nav-tabs erp-nav-tabs border-0 mb-0" role="tablist">
                 <!-- แท็บ: หนังสือเข้าทั้งหมด -->
                 <li class="nav-item" role="presentation">
-                    <a href="<?= Url::to(['index', 'q' => $keyword]) ?>" 
+                    <a href="<?= Url::to(['index', 'q' => $keyword, 'status' => $statusFilter !== '' ? $statusFilter : null]) ?>" 
                        class="nav-link erp-nav-tab py-2 px-3 fw-bold d-inline-flex align-items-center gap-2 small <?= $departmentId === null ? 'active' : '' ?>">
                         <i class="bi bi-globe2 text-primary"></i>
                         <span>ทั้งหมด</span>
@@ -256,7 +279,7 @@ $pagination = $dataProvider->getPagination();
                     $dUnreadCount = $unreadDeptCounts[(int) $dept->id] ?? 0;
                     ?>
                     <li class="nav-item" role="presentation">
-                        <a href="<?= Url::to(['index', 'department_id' => $dept->id, 'q' => $keyword]) ?>" 
+                        <a href="<?= Url::to(['index', 'department_id' => $dept->id, 'q' => $keyword, 'status' => $statusFilter !== '' ? $statusFilter : null]) ?>" 
                            class="nav-link erp-nav-tab py-2 px-3 fw-bold d-inline-flex align-items-center gap-2 small <?= $isActiveTab ? 'active' : '' ?>">
                             <i class="bi bi-building text-secondary"></i>
                             <span><?= Html::encode($dept->name) ?></span>
