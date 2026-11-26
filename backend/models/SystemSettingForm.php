@@ -20,6 +20,11 @@ class SystemSettingForm extends Model
     public string $acting_director_position = 'รองผู้อำนวยการ รักษาการในตำแหน่งผู้อำนวยการโรงเรียนกุดชุมวิทยาคม';
     public int|string $is_acting_director = 0;
     public int|string $auto_approve_signup = 0;
+    public int|string $line_notify_enabled = 1;
+    public int|string $line_quota_optimize = 1;
+    public int|string $line_cooldown_minutes = 180;
+    public int|string $line_realtime_cooldown_minutes = 30;
+    public int|string $line_urgent_realtime = 1;
     public int|string $doc_receive_start_no = 1;
     public int|string $doc_receive_year = 2569;
 
@@ -35,7 +40,10 @@ class SystemSettingForm extends Model
             [['doc_receive_start_no', 'doc_receive_year'], 'required'],
             [['doc_receive_start_no'], 'integer', 'min' => 1, 'max' => 999999],
             [['doc_receive_year'], 'integer', 'min' => 2500, 'max' => 2700],
-            [['is_acting_director', 'auto_approve_signup'], 'boolean'],
+            [['is_acting_director', 'auto_approve_signup', 'line_notify_enabled', 'line_quota_optimize', 'line_urgent_realtime'], 'boolean'],
+            [['line_cooldown_minutes', 'line_realtime_cooldown_minutes'], 'integer', 'min' => 0, 'max' => 1440],
+            [['line_cooldown_minutes'], 'default', 'value' => 180],
+            [['line_realtime_cooldown_minutes'], 'default', 'value' => 30],
             [['acting_director_user_id'], 'default', 'value' => null],
             [['acting_director_user_id'], 'integer'],
             [['acting_director_user_id'], 'exist', 'skipOnError' => true, 'targetClass' => \common\models\User::class, 'targetAttribute' => ['acting_director_user_id' => 'id']],
@@ -69,6 +77,11 @@ class SystemSettingForm extends Model
             'acting_director_position' => 'ตำแหน่งรักษาการ',
             'is_acting_director' => 'เปิดใช้งานชื่อรักษาการแทนผู้อำนวยการ (ในกรณีที่ผู้อำนวยการโรงเรียนไม่อยู่)',
             'auto_approve_signup' => 'อนุมัติผู้ใช้งานใหม่อัตโนมัติ (Auto Approve)',
+            'line_notify_enabled' => 'เปิดใช้งานการแจ้งเตือนผ่าน LINE (Push Message)',
+            'line_quota_optimize' => 'เปิดโหมดประหยัดโควตา LINE (รวมส่งเป็นรอบ + Cooldown)',
+            'line_cooldown_minutes' => 'Cooldown กลุ่มส่งเป็นรอบ (นาที)',
+            'line_realtime_cooldown_minutes' => 'Short Cooldown กลุ่มส่งทันที (นาที)',
+            'line_urgent_realtime' => 'ส่งทันที (Real-time) สำหรับหนังสือด่วนมาก / ด่วนที่สุด',
             'doc_receive_start_no' => 'เลขรับหนังสือเริ่มต้น',
             'doc_receive_year' => 'ปี พ.ศ. ของเลขรับหนังสือ',
         ];
@@ -100,6 +113,11 @@ class SystemSettingForm extends Model
         $this->acting_director_position = (string) SystemSetting::get(SystemSetting::KEY_ACTING_DIRECTOR_POSITION, 'รองผู้อำนวยการ รักษาการในตำแหน่งผู้อำนวยการโรงเรียนกุดชุมวิทยาคม');
         $this->is_acting_director = (int) SystemSetting::get(SystemSetting::KEY_IS_ACTING_DIRECTOR, 0);
         $this->auto_approve_signup = (int) SystemSetting::get(SystemSetting::KEY_AUTO_APPROVE_SIGNUP, 0);
+        $this->line_notify_enabled = (int) SystemSetting::get(SystemSetting::KEY_LINE_NOTIFY_ENABLED, 1);
+        $this->line_quota_optimize = (int) SystemSetting::get(SystemSetting::KEY_LINE_QUOTA_OPTIMIZE, 1);
+        $this->line_cooldown_minutes = (int) SystemSetting::get(SystemSetting::KEY_LINE_COOLDOWN_MINUTES, 180);
+        $this->line_realtime_cooldown_minutes = (int) SystemSetting::get(SystemSetting::KEY_LINE_REALTIME_COOLDOWN_MINUTES, 30);
+        $this->line_urgent_realtime = (int) SystemSetting::get(SystemSetting::KEY_LINE_URGENT_REALTIME, 1);
         $this->doc_receive_start_no = (int) SystemSetting::get(SystemSetting::KEY_DOC_RECEIVE_START_NO, 1);
         $this->doc_receive_year = (int) SystemSetting::get(SystemSetting::KEY_DOC_RECEIVE_YEAR, $currentYear);
     }
@@ -127,6 +145,11 @@ class SystemSettingForm extends Model
         SystemSetting::set(SystemSetting::KEY_ACTING_DIRECTOR_POSITION, trim($this->acting_director_position), 'executive', 'ตำแหน่งรักษาการแทนผู้อำนวยการโรงเรียน');
         SystemSetting::set(SystemSetting::KEY_IS_ACTING_DIRECTOR, $this->is_acting_director ? '1' : '0', 'executive', 'ใช้ชื่อรักษาการแทนผู้อำนวยการ');
         SystemSetting::set(SystemSetting::KEY_AUTO_APPROVE_SIGNUP, $this->auto_approve_signup ? '1' : '0', 'user', 'อนุมัติการสมัครสมาชิกใหม่อัตโนมัติ');
+        SystemSetting::set(SystemSetting::KEY_LINE_NOTIFY_ENABLED, $this->line_notify_enabled ? '1' : '0', 'line', 'เปิด/ปิดการส่งแจ้งเตือนผ่าน LINE (Push Message)');
+        SystemSetting::set(SystemSetting::KEY_LINE_QUOTA_OPTIMIZE, $this->line_quota_optimize ? '1' : '0', 'line', 'เปิดโหมดประหยัดโควตาแจ้งเตือน LINE (Digest + Cooldown)');
+        SystemSetting::set(SystemSetting::KEY_LINE_COOLDOWN_MINUTES, (string) max(0, (int) $this->line_cooldown_minutes), 'line', 'ระยะเวลา Cooldown กลุ่มส่งเป็นรอบ (นาที)');
+        SystemSetting::set(SystemSetting::KEY_LINE_REALTIME_COOLDOWN_MINUTES, (string) max(0, (int) $this->line_realtime_cooldown_minutes), 'line', 'ระยะเวลา Short Cooldown กลุ่มส่งทันที (นาที)');
+        SystemSetting::set(SystemSetting::KEY_LINE_URGENT_REALTIME, $this->line_urgent_realtime ? '1' : '0', 'line', 'ส่งทันทีสำหรับหนังสือด่วนมาก/ด่วนที่สุด');
         SystemSetting::set(SystemSetting::KEY_DOC_RECEIVE_START_NO, (string) $this->doc_receive_start_no, 'document', 'เลขรับหนังสือเริ่มต้น');
         SystemSetting::set(SystemSetting::KEY_DOC_RECEIVE_YEAR, (string) $this->doc_receive_year, 'document', 'ปี พ.ศ. ของเลขรับหนังสือ');
 

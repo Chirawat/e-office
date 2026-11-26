@@ -31,6 +31,12 @@ class SystemSetting extends ActiveRecord
     public const KEY_DOC_RECEIVE_YEAR = 'doc_receive_year';
     public const KEY_AUTO_APPROVE_SIGNUP = 'auto_approve_signup';
     public const KEY_DOCUMENT_APPROVER_ID = 'document_approver_id';
+    public const KEY_LINE_NOTIFY_ENABLED = 'line_notify_enabled';
+    public const KEY_LINE_QUOTA_OPTIMIZE = 'line_quota_optimize';
+    public const KEY_LINE_COOLDOWN_MINUTES = 'line_cooldown_minutes';
+    public const KEY_LINE_REALTIME_COOLDOWN_MINUTES = 'line_realtime_cooldown_minutes';
+    public const KEY_LINE_URGENT_REALTIME = 'line_urgent_realtime';
+    public const KEY_LINE_DIGEST_CRON_TOKEN = 'line_digest_cron_token';
 
     /** @var array<string, mixed>|null Local memory cache for request */
     private static ?array $cache = null;
@@ -221,6 +227,65 @@ class SystemSetting extends ActiveRecord
         }
 
         return User::findOne(['id' => $id, 'status' => User::STATUS_ACTIVE]);
+    }
+
+    /**
+     * ตรวจสอบว่าเปิดใช้งานการส่งแจ้งเตือนผ่าน LINE (Push) หรือไม่
+     */
+    public static function isLineNotifyEnabled(): bool
+    {
+        return (string) static::get(self::KEY_LINE_NOTIFY_ENABLED, '1') === '1';
+    }
+
+    /**
+     * ตรวจสอบว่าเปิดโหมดประหยัดโควตา LINE (Digest + Cooldown) หรือไม่
+     */
+    public static function isLineQuotaOptimize(): bool
+    {
+        return (string) static::get(self::KEY_LINE_QUOTA_OPTIMIZE, '1') === '1';
+    }
+
+    /**
+     * ระยะเวลา Cooldown (นาที) ที่จะไม่ส่ง LINE ซ้ำให้บุคคลเดิม (สำหรับกลุ่ม Digest)
+     */
+    public static function getLineCooldownMinutes(): int
+    {
+        return max(0, (int) static::get(self::KEY_LINE_COOLDOWN_MINUTES, 180));
+    }
+
+    /**
+     * ระยะเวลา Short Cooldown (นาที) สำหรับกลุ่มส่งทันที (ธุรการ, ผู้ตรวจ, รอง ผอ./ผู้ช่วย ผอ.)
+     */
+    public static function getLineRealtimeCooldownMinutes(): int
+    {
+        return max(0, (int) static::get(self::KEY_LINE_REALTIME_COOLDOWN_MINUTES, 30));
+    }
+
+    /**
+     * ตรวจสอบว่าหนังสือระดับด่วนมาก/ด่วนที่สุดให้ส่ง LINE ทันที (Real-time) หรือไม่
+     */
+    public static function isLineUrgentRealtime(): bool
+    {
+        return (string) static::get(self::KEY_LINE_URGENT_REALTIME, '1') === '1';
+    }
+
+    /**
+     * ดึงหรือสร้าง Secret Token สำหรับรัน Cron Job ส่งสรุป LINE ผ่าน URL
+     */
+    public static function getOrCreateLineDigestCronToken(): string
+    {
+        $token = trim((string) static::get(self::KEY_LINE_DIGEST_CRON_TOKEN, ''));
+        if ($token !== '' && strlen($token) >= 16) {
+            return $token;
+        }
+
+        try {
+            $token = Yii::$app->security->generateRandomString(32);
+        } catch (\Throwable $e) {
+            $token = bin2hex(random_bytes(16));
+        }
+        static::set(self::KEY_LINE_DIGEST_CRON_TOKEN, $token, 'line', 'Secret token สำหรับ Cron Job ส่งรอบแจ้งเตือน LINE');
+        return $token;
     }
 
     /**

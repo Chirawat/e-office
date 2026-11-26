@@ -6,6 +6,7 @@ namespace backend\controllers;
 
 use common\components\LineMessagingService;
 use common\models\LineLoginSession;
+use common\models\SystemSetting;
 use common\models\User;
 use Yii;
 use yii\filters\AccessControl;
@@ -24,7 +25,7 @@ class LineController extends Controller
                 'class' => AccessControl::class,
                 'rules' => [
                     [
-                        'actions' => ['webhook'],
+                        'actions' => ['webhook', 'flush-digest'],
                         'allow' => true,
                     ],
                     [
@@ -35,6 +36,24 @@ class LineController extends Controller
                 ],
             ],
         ];
+    }
+
+    public function actionFlushDigest(string $token = '', int $force = 0): Response
+    {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $expected = SystemSetting::getOrCreateLineDigestCronToken();
+        if ($token === '' || !hash_equals($expected, $token)) {
+            Yii::$app->response->statusCode = 403;
+            return $this->asJson(['ok' => false, 'error' => 'Invalid token']);
+        }
+
+        $result = (new LineMessagingService())->flushDigestQueue($force === 1);
+        return $this->asJson([
+            'ok' => true,
+            'time' => date('Y-m-d H:i:s'),
+            'result' => $result,
+        ]);
     }
 
     public function actionLink(): Response|string

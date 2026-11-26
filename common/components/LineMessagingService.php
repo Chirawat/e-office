@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace common\components;
 
 use common\models\Document;
+use common\models\DocumentAssignment;
+use common\models\LineNotificationQueue;
 use common\models\Memo;
+use common\models\SystemSetting;
 use common\models\User;
 use Yii;
 use yii\helpers\Url;
@@ -16,12 +19,43 @@ class LineMessagingService
 
     /**
      * แจ้งเตือนเมื่อครูหรือบุคลากรได้รับมอบหมายหนังสือเข้าใหม่ (Flex Message พร้อมปุ่มเปิดอ่าน)
+     * รองรับโหมดประหยัดโควตา (Digest + Cooldown) ตามการตั้งค่าระบบ
      */
     public function notifyAssignedDocument(User $recipient, Document $document, User $actor, string $instruction = ''): bool
     {
+        if (!SystemSetting::isLineNotifyEnabled()) {
+            return false;
+        }
         if ($recipient->line_user_id === null || $recipient->line_user_id === '') {
             Yii::warning('LINE notification skipped: recipient has no line_user_id. user_id=' . $recipient->id, __METHOD__);
             return false;
+        }
+
+        $isUrgent = in_array($document->urgency, [Document::URGENCY_VERY_URGENT, Document::URGENCY_MOST_URGENT], true);
+        if ($this->shouldQueueForDigest($recipient, $isUrgent, 'ได้รับมอบหมายงานใหม่')) {
+            return $this->enqueueNotification(
+                $recipient,
+                LineNotificationQueue::EVENT_DOCUMENT_ASSIGNED,
+                LineNotificationQueue::REF_DOCUMENT,
+                (int) $document->id,
+                'ได้รับมอบหมายงานใหม่',
+                $document->subject,
+                'เลขรับ ' . $document->receive_no . ($instruction !== '' ? ' · ' . $instruction : ''),
+                $isUrgent
+            );
+        }
+
+        if ($this->shouldSkipRealtimeByCooldown($recipient, $isUrgent)) {
+            $this->logSkippedByCooldown(
+                $recipient,
+                LineNotificationQueue::EVENT_DOCUMENT_ASSIGNED,
+                LineNotificationQueue::REF_DOCUMENT,
+                (int) $document->id,
+                'ได้รับมอบหมายงานใหม่',
+                $document->subject,
+                $isUrgent
+            );
+            return true;
         }
 
         $altText = 'คุณได้รับมอบหมายงานใหม่: ' . $document->subject;
@@ -43,19 +77,62 @@ class LineMessagingService
             }
             $lines[] = '';
             $lines[] = 'เปิดงาน: ' . Url::to(['/document/view', 'id' => $document->id], true);
-            return $this->pushText($recipient->line_user_id, implode("\n", $lines));
+            $sent = $this->pushText($recipient->line_user_id, implode("\n", $lines));
         }
 
-        return true;
+        if ($sent) {
+            $this->logImmediateSent(
+                $recipient,
+                LineNotificationQueue::EVENT_DOCUMENT_ASSIGNED,
+                LineNotificationQueue::REF_DOCUMENT,
+                (int) $document->id,
+                'ได้รับมอบหมายงานใหม่',
+                $document->subject,
+                $isUrgent
+            );
+        }
+
+        return $sent;
     }
 
     /**
-     * แจ้งเตือนกระบวนการหนังสือรับ (เสนอผู้ตรวจสอบ/อนุมัติ, เสนอรอง ผอ., ส่งกลับแก้ไข)
+     * แจ้งเตือนกระบวนการหนังสือรับ (เสนอผู้ตรวจสอบ/อนุมัติ, เสนอรอง ผอ., เสนอ ผอ., ส่งกลับแก้ไข)
+     * รองรับโหมดประหยัดโควตา (Digest + Cooldown) ตามการตั้งค่าระบบ
      */
     public function notifyDocumentWorkflow(User $recipient, Document $document, User $actor, string $title, string $message = ''): bool
     {
+        if (!SystemSetting::isLineNotifyEnabled()) {
+            return false;
+        }
         if ($recipient->line_user_id === null || $recipient->line_user_id === '') {
             return false;
+        }
+
+        $isUrgent = in_array($document->urgency, [Document::URGENCY_VERY_URGENT, Document::URGENCY_MOST_URGENT], true);
+        if ($this->shouldQueueForDigest($recipient, $isUrgent, $title)) {
+            return $this->enqueueNotification(
+                $recipient,
+                LineNotificationQueue::EVENT_DOCUMENT_WORKFLOW,
+                LineNotificationQueue::REF_DOCUMENT,
+                (int) $document->id,
+                $title,
+                $document->subject,
+                'เลขรับ ' . $document->receive_no . ($message !== '' ? ' · ' . $message : ''),
+                $isUrgent
+            );
+        }
+
+        if ($this->shouldSkipRealtimeByCooldown($recipient, $isUrgent)) {
+            $this->logSkippedByCooldown(
+                $recipient,
+                LineNotificationQueue::EVENT_DOCUMENT_WORKFLOW,
+                LineNotificationQueue::REF_DOCUMENT,
+                (int) $document->id,
+                $title,
+                $document->subject,
+                $isUrgent
+            );
+            return true;
         }
 
         $lines = [
@@ -72,17 +149,60 @@ class LineMessagingService
         $lines[] = '';
         $lines[] = 'เปิดดูเอกสาร: ' . Url::to(['/document/view', 'id' => $document->id], true);
 
-        return $this->pushText($recipient->line_user_id, implode("\n", $lines));
+        $sent = $this->pushText($recipient->line_user_id, implode("\n", $lines));
+        if ($sent) {
+            $this->logImmediateSent(
+                $recipient,
+                LineNotificationQueue::EVENT_DOCUMENT_WORKFLOW,
+                LineNotificationQueue::REF_DOCUMENT,
+                (int) $document->id,
+                $title,
+                $document->subject,
+                $isUrgent
+            );
+        }
+
+        return $sent;
     }
 
     /**
      * แจ้งเตือนเกี่ยวกับบันทึกข้อความ e-Memo (Flex Message พร้อมปุ่มเปิดดู)
+     * รองรับโหมดประหยัดโควตา (Digest + Cooldown) ตามการตั้งค่าระบบ
      */
     public function notifyMemo(User $recipient, Memo $memo, User $actor, string $message): bool
     {
+        if (!SystemSetting::isLineNotifyEnabled()) {
+            return false;
+        }
         if ($recipient->line_user_id === null || $recipient->line_user_id === '') {
             Yii::warning('LINE notification skipped: recipient has no line_user_id. user_id=' . $recipient->id, __METHOD__);
             return false;
+        }
+
+        if ($this->shouldQueueForDigest($recipient, false, $message)) {
+            return $this->enqueueNotification(
+                $recipient,
+                LineNotificationQueue::EVENT_MEMO,
+                LineNotificationQueue::REF_MEMO,
+                (int) $memo->id,
+                $message,
+                $memo->subject,
+                'บันทึกเสนอ ' . ($memo->memo_no ?: 'ยังไม่ระบุเลขที่'),
+                false
+            );
+        }
+
+        if ($this->shouldSkipRealtimeByCooldown($recipient, false)) {
+            $this->logSkippedByCooldown(
+                $recipient,
+                LineNotificationQueue::EVENT_MEMO,
+                LineNotificationQueue::REF_MEMO,
+                (int) $memo->id,
+                $message,
+                $memo->subject,
+                false
+            );
+            return true;
         }
 
         $altText = $message . ': ' . $memo->subject;
@@ -100,10 +220,325 @@ class LineMessagingService
                 '',
                 'เปิดบันทึก: ' . Url::to(['/memo/view', 'id' => $memo->id], true),
             ];
-            return $this->pushText($recipient->line_user_id, implode("\n", $lines));
+            $sent = $this->pushText($recipient->line_user_id, implode("\n", $lines));
         }
 
+        if ($sent) {
+            $this->logImmediateSent(
+                $recipient,
+                LineNotificationQueue::EVENT_MEMO,
+                LineNotificationQueue::REF_MEMO,
+                (int) $memo->id,
+                $message,
+                $memo->subject,
+                false
+            );
+        }
+
+        return $sent;
+    }
+
+    /**
+     * ส่งข้อความสรุปรวม (Digest) จากคิวทั้งหมด โดยเช็ค Cooldown และตัดรายการที่รับทราบ/ปิดเรื่องแล้วออกอัตโนมัติ
+     *
+     * @return array{sent_users: int, sent_items: int, skipped_items: int, deferred_users: int}
+     */
+    public function flushDigestQueue(bool $ignoreCooldown = false): array
+    {
+        $result = [
+            'sent_users' => 0,
+            'sent_items' => 0,
+            'skipped_items' => 0,
+            'deferred_users' => 0,
+        ];
+
+        if (!SystemSetting::isLineNotifyEnabled()) {
+            return $result;
+        }
+
+        try {
+            $pendingItems = LineNotificationQueue::find()
+                ->with(['user'])
+                ->where(['status' => LineNotificationQueue::STATUS_PENDING])
+                ->orderBy(['created_at' => SORT_ASC, 'id' => SORT_ASC])
+                ->all();
+        } catch (\Throwable $e) {
+            Yii::warning('flushDigestQueue failed to query queue: ' . $e->getMessage(), __METHOD__);
+            return $result;
+        }
+
+        if ($pendingItems === []) {
+            return $result;
+        }
+
+        $byUser = [];
+        foreach ($pendingItems as $item) {
+            $byUser[(int) $item->user_id][] = $item;
+        }
+
+        $now = time();
+        $cooldownSeconds = SystemSetting::getLineCooldownMinutes() * 60;
+
+        foreach ($byUser as $userId => $items) {
+            $recipient = $items[0]->user;
+            if (!$recipient instanceof User || $recipient->status !== User::STATUS_ACTIVE || empty($recipient->line_user_id)) {
+                foreach ($items as $item) {
+                    $item->status = LineNotificationQueue::STATUS_SKIPPED;
+                    $item->sent_at = $now;
+                    $item->save(false, ['status', 'sent_at']);
+                    $result['skipped_items']++;
+                }
+                continue;
+            }
+
+            // Smart Skip: ตัดรายการที่ถูกดำเนินการ/รับทราบ/ปิดเรื่องไปแล้วออกก่อนส่ง
+            $activeItems = [];
+            $seenRefs = [];
+            foreach ($items as $item) {
+                $refKey = $item->ref_type . ':' . $item->ref_id;
+                if (isset($seenRefs[$refKey]) || $this->isQueuedItemAlreadyResolved($item, $recipient)) {
+                    $item->status = LineNotificationQueue::STATUS_SKIPPED;
+                    $item->sent_at = $now;
+                    $item->save(false, ['status', 'sent_at']);
+                    $result['skipped_items']++;
+                    continue;
+                }
+                $seenRefs[$refKey] = true;
+                $activeItems[] = $item;
+            }
+
+            if ($activeItems === []) {
+                continue;
+            }
+
+            // ตรวจสอบ Cooldown (ไม่ยิงซ้ำให้บุคคลเดิมภายในระยะเวลา Cooldown)
+            if (!$ignoreCooldown && $cooldownSeconds > 0) {
+                $lastSentAt = LineNotificationQueue::lastSentAtForUser($userId);
+                if ($lastSentAt !== null && ($now - $lastSentAt) < $cooldownSeconds) {
+                    $result['deferred_users']++;
+                    continue;
+                }
+            }
+
+            // รวมรายการทั้งหมดของคนนี้ส่งเป็น 1 ข้อความสรุป (ใช้โควตาแค่ 1 ข้อความ!)
+            $count = count($activeItems);
+            $workbenchUrl = $this->buildAbsoluteWorkbenchUrl();
+            $lines = [
+                "📋 สรุปงาน e-Office รอดำเนินการ ({$count} เรื่อง)",
+                '',
+            ];
+            $maxPreview = 5;
+            foreach (array_slice($activeItems, 0, $maxPreview) as $idx => $it) {
+                $num = $idx + 1;
+                $subj = mb_strimwidth($it->subject, 0, 80, '...', 'UTF-8');
+                $lines[] = "{$num}. {$subj}";
+                $lines[] = "   • {$it->title}";
+            }
+            if ($count > $maxPreview) {
+                $more = $count - $maxPreview;
+                $lines[] = "...และอีก {$more} เรื่อง";
+            }
+            $lines[] = '';
+            $lines[] = 'เปิดโต๊ะทำงานของฉัน: ' . $workbenchUrl;
+
+            $sent = $this->pushText($recipient->line_user_id, implode("\n", $lines));
+            if ($sent) {
+                $batchKey = 'digest_' . $userId . '_' . $now . '_' . random_int(100, 999);
+                foreach ($activeItems as $it) {
+                    $it->status = LineNotificationQueue::STATUS_SENT;
+                    $it->sent_at = $now;
+                    $it->batch_key = $batchKey;
+                    $it->save(false, ['status', 'sent_at', 'batch_key']);
+                }
+                $result['sent_users']++;
+                $result['sent_items'] += $count;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * กำหนดว่าควรเก็บลงคิวรอบ 11:00 / 15:00 น. (Digest) หรือส่งทันที (Real-time)
+     * - ส่งทันที: ธุรการ (officer), ผู้ตรวจสอบ/อนุมัติ, รอง ผอ./ผู้ช่วย ผอ. (deputy_director), Admin, และงานด่วนมาก/ด่วนที่สุด
+     * - รวมส่งรอบ 11:00 / 15:00 น.: ผอ. (director / รักษาการ ผอ. ในขั้นเสนอ ผอ.), หัวหน้ากลุ่มงาน (staff), และผู้ใช้ทั่วไป/ครู (general_user)
+     */
+    private function shouldQueueForDigest(User $recipient, bool $isUrgent, string $title = ''): bool
+    {
+        if (!SystemSetting::isLineQuotaOptimize()) {
+            return false;
+        }
+        if ($isUrgent && SystemSetting::isLineUrgentRealtime()) {
+            return false;
+        }
+
+        // กรณีเป็น "ผู้รักษาการแทน ผอ." และได้รับงานขั้นเสนอ ผอ. ให้รอรอบ 11:00 / 15:00 น. เหมือน ผอ.
+        $isActingDirector = SystemSetting::isActingDirector()
+            && (int) $recipient->id === (int) SystemSetting::getActingDirectorUserId();
+        if ($isActingDirector && (str_contains($title, 'พิจารณาสั่งการ') || str_contains($title, 'รอ ผอ.'))) {
+            return true;
+        }
+
+        // กลุ่มทีมกลั่นกรอง (ส่งทันที): ธุรการ, ผู้ตรวจสอบ/อนุมัติ, รอง ผอ./ผู้ช่วย ผอ., Admin
+        $approverId = SystemSetting::getDocumentApproverId();
+        if ($approverId !== null && (int) $recipient->id === $approverId) {
+            return false;
+        }
+        if (in_array($recipient->role, [User::ROLE_ADMIN, User::ROLE_OFFICER, User::ROLE_DEPUTY_DIRECTOR], true)) {
+            return false;
+        }
+
+        // กลุ่มรวมส่งรอบ 11:00 / 15:00 น.: ผอ., หัวหน้ากลุ่มงาน, ผู้ใช้ทั่วไป/ครู
         return true;
+    }
+
+    /**
+     * Short Cooldown สำหรับกลุ่มส่งทันที (กันยิงรัวเวลาลงรับหลายฉบับติดกัน)
+     * ยกเว้นหนังสือด่วนมาก/ด่วนที่สุด จะไม่ติด Cooldown
+     */
+    private function shouldSkipRealtimeByCooldown(User $recipient, bool $isUrgent): bool
+    {
+        if (!SystemSetting::isLineQuotaOptimize()) {
+            return false;
+        }
+        if ($isUrgent && SystemSetting::isLineUrgentRealtime()) {
+            return false;
+        }
+
+        $cooldownSeconds = SystemSetting::getLineRealtimeCooldownMinutes() * 60;
+        if ($cooldownSeconds <= 0) {
+            return false;
+        }
+
+        $lastSentAt = LineNotificationQueue::lastSentAtForUser((int) $recipient->id);
+        return $lastSentAt !== null && (time() - $lastSentAt) < $cooldownSeconds;
+    }
+
+    private function logSkippedByCooldown(
+        User $recipient,
+        string $eventType,
+        string $refType,
+        int $refId,
+        string $title,
+        string $subject,
+        bool $isUrgent
+    ): void {
+        try {
+            $now = time();
+            (new LineNotificationQueue([
+                'user_id' => (int) $recipient->id,
+                'event_type' => $eventType,
+                'ref_type' => $refType,
+                'ref_id' => $refId,
+                'title' => mb_substr($title, 0, 255, 'UTF-8'),
+                'subject' => mb_substr($subject, 0, 500, 'UTF-8'),
+                'detail' => 'skipped_by_realtime_cooldown',
+                'is_urgent' => $isUrgent ? 1 : 0,
+                'status' => LineNotificationQueue::STATUS_SKIPPED,
+                'created_at' => $now,
+                'sent_at' => $now,
+            ]))->save(false);
+        } catch (\Throwable $e) {
+            Yii::warning('Failed to log skipped LINE notification: ' . $e->getMessage(), __METHOD__);
+        }
+    }
+
+    private function enqueueNotification(
+        User $recipient,
+        string $eventType,
+        string $refType,
+        int $refId,
+        string $title,
+        string $subject,
+        string $detail,
+        bool $isUrgent
+    ): bool {
+        try {
+            $queue = new LineNotificationQueue([
+                'user_id' => (int) $recipient->id,
+                'event_type' => $eventType,
+                'ref_type' => $refType,
+                'ref_id' => $refId,
+                'title' => mb_substr($title, 0, 255, 'UTF-8'),
+                'subject' => mb_substr($subject, 0, 500, 'UTF-8'),
+                'detail' => $detail !== '' ? $detail : null,
+                'is_urgent' => $isUrgent ? 1 : 0,
+                'status' => LineNotificationQueue::STATUS_PENDING,
+                'created_at' => time(),
+            ]);
+            return $queue->save(false);
+        } catch (\Throwable $e) {
+            Yii::warning('Failed to enqueue LINE notification: ' . $e->getMessage(), __METHOD__);
+            return false;
+        }
+    }
+
+    private function logImmediateSent(
+        User $recipient,
+        string $eventType,
+        string $refType,
+        int $refId,
+        string $title,
+        string $subject,
+        bool $isUrgent
+    ): void {
+        try {
+            $now = time();
+            (new LineNotificationQueue([
+                'user_id' => (int) $recipient->id,
+                'event_type' => $eventType,
+                'ref_type' => $refType,
+                'ref_id' => $refId,
+                'title' => mb_substr($title, 0, 255, 'UTF-8'),
+                'subject' => mb_substr($subject, 0, 500, 'UTF-8'),
+                'is_urgent' => $isUrgent ? 1 : 0,
+                'status' => LineNotificationQueue::STATUS_SENT,
+                'batch_key' => 'rt_' . $recipient->id . '_' . $now . '_' . random_int(100, 999),
+                'created_at' => $now,
+                'sent_at' => $now,
+            ]))->save(false);
+        } catch (\Throwable $e) {
+            // Do not fail workflow if queue table isn't migrated yet
+            Yii::warning('Failed to log immediate LINE push: ' . $e->getMessage(), __METHOD__);
+        }
+    }
+
+    private function isQueuedItemAlreadyResolved(LineNotificationQueue $item, User $recipient): bool
+    {
+        try {
+            if ($item->ref_type === LineNotificationQueue::REF_DOCUMENT) {
+                $doc = Document::findOne((int) $item->ref_id);
+                if ($doc === null || $doc->status === Document::STATUS_COMPLETED) {
+                    return true;
+                }
+                if ($item->event_type === LineNotificationQueue::EVENT_DOCUMENT_ASSIGNED) {
+                    $asg = DocumentAssignment::findOne([
+                        'document_id' => $doc->id,
+                        'assigned_to' => $recipient->id,
+                    ]);
+                    if ($asg !== null && $asg->isAcknowledged()) {
+                        return true;
+                    }
+                }
+            } elseif ($item->ref_type === LineNotificationQueue::REF_MEMO) {
+                $memo = Memo::findOne((int) $item->ref_id);
+                if ($memo === null || $memo->status === Memo::STATUS_COMPLETED) {
+                    return true;
+                }
+            }
+        } catch (\Throwable $e) {
+            return false;
+        }
+        return false;
+    }
+
+    private function buildAbsoluteWorkbenchUrl(): string
+    {
+        if (Yii::$app instanceof \yii\web\Application) {
+            return Url::to(['/document/my'], true);
+        }
+        $base = rtrim((string) (Yii::$app->params['siteBaseUrl'] ?? 'https://eoffice.schoolkc.ac.th'), '/');
+        return $base . '/index.php?r=document%2Fmy';
     }
 
     /**
@@ -111,6 +546,10 @@ class LineMessagingService
      */
     public function notifyAdminNewTeacherSignup(User $newTeacher, bool $isAutoApproved = false): void
     {
+        if (!SystemSetting::isLineNotifyEnabled()) {
+            return;
+        }
+
         $admins = User::find()
             ->where(['role' => User::ROLE_ADMIN, 'status' => User::STATUS_ACTIVE])
             ->andWhere(['is not', 'line_user_id', null])
@@ -153,6 +592,9 @@ class LineMessagingService
      */
     public function notifyTeacherApproved(User $teacher): bool
     {
+        if (!SystemSetting::isLineNotifyEnabled()) {
+            return false;
+        }
         if ($teacher->line_user_id === null || $teacher->line_user_id === '') {
             return false;
         }

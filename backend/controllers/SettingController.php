@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace backend\controllers;
 
 use backend\models\SystemSettingForm;
+use common\components\LineMessagingService;
+use common\models\LineNotificationQueue;
 use common\models\SystemSetting;
 use common\models\User;
 use Yii;
@@ -35,6 +37,7 @@ class SettingController extends Controller
                 'class' => VerbFilter::class,
                 'actions' => [
                     'index' => ['get', 'post'],
+                    'flush-line-queue' => ['post'],
                 ],
             ],
         ];
@@ -76,7 +79,37 @@ class SettingController extends Controller
             'model' => $form,
             'nextReceiveNoPreview' => $nextReceiveNoPreview,
             'actingUserOptions' => $actingUserOptions,
+            'lineMonthlyUsed' => LineNotificationQueue::countMonthlyPushUsed(),
+            'linePendingSummary' => LineNotificationQueue::pendingSummary(),
+            'lineCronToken' => SystemSetting::getOrCreateLineDigestCronToken(),
         ]);
+    }
+
+    /**
+     * สั่งส่งข้อความแจ้งเตือน LINE ที่ค้างอยู่ในคิวทันที (Manual Flush โดย Admin)
+     */
+    public function actionFlushLineQueue(): Response
+    {
+        $this->requireAdmin();
+
+        $result = (new LineMessagingService())->flushDigestQueue(true);
+        if ($result['sent_users'] > 0) {
+            Yii::$app->session->setFlash(
+                'success',
+                sprintf(
+                    'ส่งสรุปแจ้งเตือน LINE เรียบร้อยแล้ว (%d ผู้รับ / รวม %d รายการ, ข้ามรายการที่รับทราบแล้ว %d รายการ)',
+                    $result['sent_users'],
+                    $result['sent_items'],
+                    $result['skipped_items']
+                )
+            );
+        } elseif ($result['skipped_items'] > 0) {
+            Yii::$app->session->setFlash('info', 'รายการในคิวทั้งหมด (' . $result['skipped_items'] . ' รายการ) ถูกรับทราบหรือดำเนินการไปแล้ว จึงไม่จำเป็นต้องส่ง LINE');
+        } else {
+            Yii::$app->session->setFlash('info', 'ไม่มีรายการแจ้งเตือนค้างอยู่ในคิว');
+        }
+
+        return $this->redirect(['index']);
     }
 
     private function requireAdmin(): void
